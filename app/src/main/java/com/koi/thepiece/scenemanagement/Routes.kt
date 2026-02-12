@@ -1,0 +1,13 @@
+package com.koi.thepiece.scenemanagement
+
+import androidx.navigation3.runtime.NavKey
+import kotlinx.serialization.Serializable
+
+
+@Serializable
+sealed interface Route : NavKey {
+    @Serializable data object Menu : Route
+    @Serializable data object Catalog : Route
+    @Serializable data object Scan : Route
+    @Serializable data object Settings : Route
+}
