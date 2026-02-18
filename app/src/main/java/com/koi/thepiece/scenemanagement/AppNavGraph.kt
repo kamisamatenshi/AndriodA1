@@ -8,8 +8,6 @@ import androidx.navigation3.ui.NavDisplay
 import coil.ImageLoader
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogScreen
 import com.koi.thepiece.AudioManager
-import com.koi.thepiece.ui.screens.CatalogScreen
-
 import com.koi.thepiece.ui.screens.MenuScreen
 import com.koi.thepiece.ui.screens.Scan
 import com.koi.thepiece.ui.screens.SettingsScreen
