@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import coil.ImageLoader
 import com.koi.thepiece.core.image.AppImageLoader
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import com.koi.thepiece.scenemanagement.AppNavGraph
 import com.koi.thepiece.ui.theme.ThePieceTheme
 
@@ -21,11 +23,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             val imageLoader: ImageLoader = remember { AppImageLoader.build(this) }
             ThePieceTheme {
+                val audio = remember { AudioManager(applicationContext) }
 
-                AppNavGraph(imageLoader)
+
+                //Auto playing BGM here
+                DisposableEffect(Unit) {
+                    //Audio is set here, the folder is at app/src/res/raw/
+                    audio.playBgm(R.raw.bgm, loop = true)
+                    onDispose { audio.onDestroy() }
+                }
+
+                AppNavGraph(imageLoader,audioManager = audio)
+
             }
         }
     }

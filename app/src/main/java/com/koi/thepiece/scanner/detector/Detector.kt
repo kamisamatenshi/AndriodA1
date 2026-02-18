@@ -96,7 +96,6 @@ class Detector(
         val options = Interpreter.Options().apply {
             if (isGpu) {
                 try {
-                    // ✅ simplest GPU path (no CompatibilityList / Options types)
                     addDelegate(GpuDelegate())
                 } catch (_: Throwable) {
                     // GPU not available / failed -> CPU fallback
