@@ -5,15 +5,15 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
-import com.koi.thepiece.ui.screens.CatalogScreen
+import coil.ImageLoader
+import com.koi.thepiece.ui.screens.catalogscreen.CatalogScreen
 import com.koi.thepiece.ui.screens.MenuScreen
 import com.koi.thepiece.ui.screens.Scan
 import com.koi.thepiece.ui.screens.SettingsScreen
 
 @Composable
-fun AppNavGraph() {
+fun AppNavGraph(imageLoader: ImageLoader) {
     val backStack = remember { mutableStateListOf<Route>(Route.Menu) }
-
     NavDisplay(
         backStack = backStack,
         entryProvider = { key ->
@@ -26,21 +26,26 @@ fun AppNavGraph() {
                     )
                 }
 
-                Route.Catalog -> NavEntry(key) { CatalogScreen( onBack = {
+                Route.Catalog -> NavEntry(key)
+                { CatalogScreen(
+                    onBack = {
                     if (backStack.size > 1) {
-                        backStack.removeAt(backStack.lastIndex)
-                    }
-                }) }
+                        backStack.removeAt(backStack.lastIndex) } },
+                    imageLoader = imageLoader)
+                }
+
                 Route.Scan -> NavEntry(key) { Scan( onBack = {
                     if (backStack.size > 1) {
                         backStack.removeAt(backStack.lastIndex)
                     }
                 }) }
+
                 Route.Settings -> NavEntry(key) { SettingsScreen( onBack = {
                     if (backStack.size > 1) {
                         backStack.removeAt(backStack.lastIndex)
                     }
                 }) }
+
             }
         },
         onBack = {

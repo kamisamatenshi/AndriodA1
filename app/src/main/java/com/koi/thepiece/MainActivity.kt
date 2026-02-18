@@ -9,8 +9,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import coil.ImageLoader
+import com.koi.thepiece.core.image.AppImageLoader
 import com.koi.thepiece.scenemanagement.AppNavGraph
 import com.koi.thepiece.ui.theme.ThePieceTheme
 
@@ -19,9 +22,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
+            val imageLoader: ImageLoader = remember { AppImageLoader.build(this) }
             ThePieceTheme {
 
-                AppNavGraph()
+                AppNavGraph(imageLoader)
             }
         }
     }

@@ -48,8 +48,8 @@ fun MenuScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
-        // Optional: show permission status
-        Text(if (hasCamPermission) "Camera: Granted ✅" else "Camera: Not granted ⚠️")
+        //show permission status
+        Text(if (hasCamPermission) "Camera: Granted " else "Camera: Not granted ")
 
         Button(onClick = onGoCatalog, modifier = Modifier.fillMaxWidth()) {
             Text("Go to Catalog")
