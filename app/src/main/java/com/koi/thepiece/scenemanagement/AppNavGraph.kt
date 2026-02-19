@@ -1,5 +1,6 @@
 package com.koi.thepiece.scenemanagement
 
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
@@ -8,6 +9,7 @@ import androidx.navigation3.ui.NavDisplay
 import coil.ImageLoader
 import com.koi.thepiece.audio.AudioManager
 import com.koi.thepiece.ui.screens.MenuScreen
+import com.koi.thepiece.ui.screens.OnePieceCardScan
 import com.koi.thepiece.ui.screens.Scan
 import com.koi.thepiece.ui.screens.SettingsScreen
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogScreen
@@ -32,7 +34,7 @@ fun AppNavGraph(
                         darkTheme = darkTheme,
                         onToggleTheme = onToggleTheme,
                         onGoCatalog = { backStack.add(Route.Catalog) },
-                        onGoScanner = { backStack.add(Route.Scan) },
+                        onGoScanner = { backStack.add(Route.OCRScan) },
                         onGoSettings = { backStack.add(Route.Settings) },
                     )
                 }
@@ -58,6 +60,18 @@ fun AppNavGraph(
                         }
                     )
                 }
+
+                Route.OCRScan -> NavEntry(key) {
+                    OnePieceCardScan(
+                        audioManager = audioManager,
+                        onBack = { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) },
+                        onCodeDetected = { code ->
+                            Log.d("OCRScanRoute", "Card code detected: $code")
+                            // Optional: navigate to detail screen
+                        }
+                    )
+                }
+
 
                 Route.Settings -> NavEntry(key) {
                     SettingsScreen(

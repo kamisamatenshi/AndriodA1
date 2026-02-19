@@ -10,4 +10,7 @@ sealed interface Route : NavKey {
     @Serializable data object Catalog : Route
     @Serializable data object Scan : Route
     @Serializable data object Settings : Route
+
+    @Serializable data object OCRScan : Route
+
 }
