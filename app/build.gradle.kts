@@ -65,6 +65,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.viewfinder.compose)
     implementation(libs.androidx.compose.runtime.saveable)
+    implementation(libs.androidx.compose.foundation.layout)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -125,7 +126,6 @@ dependencies {
 
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-
 
     implementation("androidx.compose.material:material-icons-extended")
 
