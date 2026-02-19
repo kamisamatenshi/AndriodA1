@@ -44,7 +44,8 @@ fun AppNavGraph(
                                 backStack.removeAt(backStack.lastIndex)
                             }
                         },
-                        imageLoader = imageLoader
+                        imageLoader = imageLoader,
+                        audio = audioManager
                     )
                 }
 

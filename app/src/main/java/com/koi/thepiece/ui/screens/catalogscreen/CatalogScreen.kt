@@ -28,6 +28,7 @@ import com.koi.thepiece.ui.screens.catalogscreen.components.CatalogHeaderBlock
 import com.koi.thepiece.ui.screens.catalogscreen.components.FilterBottomSheet
 import com.koi.thepiece.ui.screens.catalogscreen.components.PagingRow
 import com.koi.thepiece.ui.screens.catalogscreen.components.SearchBarRow
+import com.koi.thepiece.audio.AudioManager
 
 
 private enum class CatalogViewMode { GRID, LIST }
@@ -37,7 +38,9 @@ private enum class CatalogViewMode { GRID, LIST }
 fun CatalogScreen(
     onBack: () -> Unit,
     imageLoader: ImageLoader,
-) {
+    audio: AudioManager
+)
+ {
     val app = LocalContext.current.applicationContext as Application
     val vm: CatalogViewModel = viewModel(factory = CatalogViewModelFactory(app))
     val s by vm.state.collectAsState()
@@ -84,9 +87,13 @@ fun CatalogScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        audio.playClick()
+                        onBack()
+                    }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
                     }
+
                 },
                 actions = {
                     IconButton(onClick = {
