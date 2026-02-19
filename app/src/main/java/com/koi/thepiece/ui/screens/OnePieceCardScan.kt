@@ -42,6 +42,18 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
+// Represents the three possible card variants. Cycles in order: Normal → Star → SP → Normal.
+enum class CardVariant(val label: String) {
+    NORMAL(""),
+    STAR("★"),
+    SP("SP");
+
+    fun next(): CardVariant = entries[(ordinal + 1) % entries.size]
+}
+
+// Holds the quantity and selected variant for a single scanned card code.
+data class CardEntry(val quantity: Int, val variant: CardVariant = CardVariant.NORMAL)
+
 @Composable
 fun OnePieceCardScan(
     modifier: Modifier = Modifier,
@@ -63,8 +75,8 @@ fun OnePieceCardScan(
     // (scanning → retry → scanning → ...) doesn't cause the button to flicker.
     var buttonWorking by remember { mutableStateOf(false) }
     var cameraControl: CameraControl? by remember { mutableStateOf<CameraControl?>(null) }
-    // Maps each detected card code to its quantity. Preserves insertion order for display.
-    var detectedCodes by remember { mutableStateOf(linkedMapOf<String, Int>()) }
+    // Maps each detected card code to its entry (quantity + variant). Preserves insertion order.
+    var detectedCards by remember { mutableStateOf(linkedMapOf<String, CardEntry>()) }
     // Guards against concurrent OCR calls when frames arrive faster than processing completes
     var isProcessing by remember { mutableStateOf(false) }
 
@@ -94,20 +106,23 @@ fun OnePieceCardScan(
         recognizer.process(inputImage)
             .addOnSuccessListener { visionText ->
                 val rawText = visionText.text
-                Log.d("OCRScan", "Raw OCR text: $rawText")
 
-                // Tolerant pattern that accepts common OCR substitutions (O/0, en-dash/hyphen),
-                // then sanitizes the match before storing.
-                val codeRegex = Regex("[A-Z][A-Z0-9][0-9O]{2}[-–][0-9O]{3}")
-                val match = codeRegex.find(rawText)?.value
-                val code = match
+                // Extracts the base card code only. Variant is always set to NORMAL on scan
+                // and can be adjusted manually by tapping the variant badge in the card list.
+                val codeRegex = Regex("""[A-Z][A-Z0-9][0-9O]{2}[-–][0-9O]{3}""")
+                val code = codeRegex.find(rawText)?.value
                     ?.replace('–', '-')
                     ?.replace('O', '0')
 
                 if (code != null) {
-                    val updated = LinkedHashMap(detectedCodes)
-                    updated[code] = (updated[code] ?: 0) + 1
-                    detectedCodes = updated
+                    val updated = LinkedHashMap(detectedCards)
+                    val existing = updated[code]
+                    updated[code] = if (existing != null) {
+                        existing.copy(quantity = existing.quantity + 1)
+                    } else {
+                        CardEntry(quantity = 1)
+                    }
+                    detectedCards = updated
                     scanningState = "done"
                     buttonWorking = false
                     onCodeDetected(code)
@@ -209,9 +224,9 @@ fun OnePieceCardScan(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Card list with quantity controls. Each row shows the card code, current quantity,
-                // and + / - buttons to adjust. Removing the last copy of a card removes the row.
-                // The list is scrollable so large collections don't push the action bar off screen.
+                // Card list with quantity and variant controls. Each row shows the base code,
+                // a tappable variant badge that cycles Normal → ★ → SP → Normal, the quantity,
+                // and + / - buttons. Removing the last copy of a card removes the row entirely.
                 val scrollState = rememberScrollState()
                 Column(
                     modifier = Modifier
@@ -219,7 +234,7 @@ fun OnePieceCardScan(
                         .fillMaxWidth()
                         .verticalScroll(scrollState)
                 ) {
-                    if (detectedCodes.isEmpty()) {
+                    if (detectedCards.isEmpty()) {
                         Text(
                             "No cards scanned yet",
                             color = colorOnSurfaceVariant,
@@ -242,11 +257,19 @@ fun OnePieceCardScan(
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
-                                "Quantity",
+                                "Variant",
                                 color = colorOnSurfaceVariant,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.width(72.dp),
+                                modifier = Modifier.width(56.dp),
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                "Qty",
+                                color = colorOnSurfaceVariant,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.width(40.dp),
                                 textAlign = TextAlign.Center
                             )
                             Text(
@@ -259,33 +282,67 @@ fun OnePieceCardScan(
                             )
                         }
 
-                        detectedCodes.entries.forEach { (code, qty) ->
+                        detectedCards.entries.forEach { (code, entry) ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                // Base card code
                                 Text(
                                     code,
                                     color = colorOnSurface,
-                                    fontSize = 16.sp,
+                                    fontSize = 15.sp,
                                     modifier = Modifier.weight(1f)
                                 )
+
+                                // Tappable variant badge — cycles Normal (blank) → ★ → SP on each tap.
+                                // Outlined box makes it clear the field is interactive.
+                                Box(
+                                    modifier = Modifier
+                                        .width(56.dp)
+                                        .border(
+                                            width = 1.dp,
+                                            color = colorOnSurfaceVariant.copy(alpha = 0.4f),
+                                            shape = RoundedCornerShape(4.dp)
+                                        )
+                                        .clickable {
+                                            val updated = LinkedHashMap(detectedCards)
+                                            updated[code] = entry.copy(variant = entry.variant.next())
+                                            detectedCards = updated
+                                        }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = entry.variant.label.ifEmpty { "—" },
+                                        color = if (entry.variant == CardVariant.NORMAL)
+                                            colorOnSurfaceVariant
+                                        else
+                                            colorPrimary,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+
+                                // Quantity
                                 Text(
-                                    "x$qty",
+                                    "x${entry.quantity}",
                                     color = colorOnSurface,
-                                    fontSize = 16.sp,
-                                    modifier = Modifier.width(72.dp),
+                                    fontSize = 15.sp,
+                                    modifier = Modifier.width(40.dp),
                                     textAlign = TextAlign.Center
                                 )
-                                // + and - controls
+
+                                // + and - quantity controls
                                 Row(modifier = Modifier.width(88.dp)) {
                                     IconButton(
                                         onClick = {
-                                            val updated = LinkedHashMap(detectedCodes)
-                                            updated[code] = (updated[code] ?: 1) + 1
-                                            detectedCodes = updated
+                                            val updated = LinkedHashMap(detectedCards)
+                                            updated[code] = entry.copy(quantity = entry.quantity + 1)
+                                            detectedCards = updated
                                             onCodeDetected(code)
                                         },
                                         modifier = Modifier.size(40.dp)
@@ -294,10 +351,10 @@ fun OnePieceCardScan(
                                     }
                                     IconButton(
                                         onClick = {
-                                            val updated = LinkedHashMap(detectedCodes)
-                                            val newQty = (updated[code] ?: 1) - 1
-                                            if (newQty <= 0) updated.remove(code) else updated[code] = newQty
-                                            detectedCodes = updated
+                                            val updated = LinkedHashMap(detectedCards)
+                                            val newQty = entry.quantity - 1
+                                            if (newQty <= 0) updated.remove(code) else updated[code] = entry.copy(quantity = newQty)
+                                            detectedCards = updated
                                         },
                                         modifier = Modifier.size(40.dp)
                                     ) {
