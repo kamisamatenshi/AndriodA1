@@ -9,13 +9,16 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -30,68 +33,575 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
+import coil.size.Scale
 import com.koi.thepiece.audio.AudioManager
+import com.koi.thepiece.data.model.Card
 import com.koi.thepiece.ui.components.SfxButton
 import com.koi.thepiece.ui.components.SfxFAB
+import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
 import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-// Represents the three possible card variants. Cycles in order: Normal → Star → SP → Normal.
-enum class CardVariant(val label: String) {
-    NORMAL(""),
-    STAR("★"),
-    SP("SP");
+// ─── Data types ──────────────────────────────────────────────────────────────
 
-    fun next(): CardVariant = entries[(ordinal + 1) % entries.size]
+/**
+ * Each entry in the enum corresponds to a single rarity tier that exists in the card database.
+ * [rarityKey] matches the lowercase rarity string stored on [Card.rarity].
+ * [label] is the human-readable string shown in the UI badge and picker dialog.
+ *
+ * UNKNOWN is a sentinel value used immediately after a card is scanned. It shows "—" in the
+ * badge so the user knows they still need to assign a real rarity. It intentionally has no
+ * rarityKey so it can never accidentally match database data or stack with a real variant row.
+ */
+enum class CardVariant(val rarityKey: String, val label: String) {
+    UNKNOWN("", "—"),
+    A_SEC("p-sec", "A-SEC"),
+    SEC("sec",     "SEC"),
+    A_SR("p-sr",   "A-SR"),
+    SR("sr",       "SR"),
+    A_R("p-r",     "A-R"),
+    R("r",         "R"),
+    A_L("p-l",     "A-L"),
+    L("l",         "L"),
+    SP("sp",       "SP"),
+    UC("uc",       "UC"),
+    C("c",         "C");
+
+    companion object {
+        /** Returns the [CardVariant] whose [rarityKey] matches [rarity] (case-insensitive),
+         *  or null if the rarity is blank, null, or doesn't match any known variant. */
+        fun fromRarity(rarity: String?): CardVariant? {
+            val key = rarity?.lowercase() ?: return null
+            return entries.firstOrNull { it != UNKNOWN && it.rarityKey == key }
+        }
+    }
 }
 
-// Holds the quantity and selected variant for a single scanned card code.
-data class CardEntry(val quantity: Int, val variant: CardVariant = CardVariant.NORMAL)
+/**
+ * Represents a single row in the scanned-card list.
+ * [code] is the base card code (e.g. "OP08-006").
+ * [quantity] is how many copies are in this row.
+ * [variant] is the selected rarity tier; defaults to UNKNOWN until the user picks one.
+ * [selectedCardId] pins a specific alternate-art card by its database ID; null means
+ * the first art found for the variant is used.
+ */
+data class CardEntry(
+    val code: String,
+    val quantity: Int,
+    val variant: CardVariant = CardVariant.UNKNOWN,
+    val selectedCardId: Int? = null
+)
 
+/**
+ * Builds the map key used to uniquely identify a [CardEntry].
+ * Combining code + variant + optional card ID ensures that the same base code at different
+ * rarities or different alternate arts never accidentally stack into the same row.
+ */
+fun cardKey(code: String, variant: CardVariant, cardId: Int? = null) =
+    "$code|${variant.name}|${cardId ?: ""}"
+
+// ─── OCR helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Attempts to extract a valid One Piece TCG card code from raw OCR text.
+ * The regex matches the standard format (e.g. "OP08-006") and then corrects common
+ * OCR misreads: digits in the 2-char set prefix are converted to letters (0→O),
+ * and letters in the numeric portions are converted to digits (O→0).
+ * Returns null if no code-shaped string is found.
+ */
+fun extractCardCode(rawText: String): String? {
+    val codeRegex = Regex("""[A-Z][A-Z0-9][0-9O]{2}[-–][0-9O]{3}""")
+    return codeRegex.find(rawText)?.value
+        ?.replace('–', '-')
+        ?.let { raw ->
+            val dashIdx = raw.indexOf('-')
+            if (dashIdx < 2) return@let raw
+            val prefix  = raw.substring(0, 2).replace('0', 'O')
+            val numbers = raw.substring(2).replace('O', '0')
+            prefix + numbers
+        }
+}
+
+/**
+ * Crops the center horizontal strip of a camera frame to match the grey guide-box region
+ * drawn on screen. The crop is 80% of the frame width and 30% of the frame height,
+ * centred vertically. All coordinates are clamped to prevent out-of-bounds crashes on
+ * unusual frame dimensions.
+ */
+fun cropCenterStrip(bitmap: Bitmap): Bitmap {
+    val cropLeft   = (bitmap.width  * 0.10f).toInt()
+    val cropWidth  = (bitmap.width  * 0.80f).toInt()
+    val cropTop    = (bitmap.height * 0.35f).toInt()
+    val cropHeight = (bitmap.height * 0.30f).toInt()
+    val safeLeft   = cropLeft.coerceIn(0, bitmap.width - 1)
+    val safeTop    = cropTop.coerceIn(0, bitmap.height - 1)
+    val safeWidth  = cropWidth.coerceAtMost(bitmap.width - safeLeft)
+    val safeHeight = cropHeight.coerceAtMost(bitmap.height - safeTop)
+    return Bitmap.createBitmap(bitmap, safeLeft, safeTop, safeWidth, safeHeight)
+}
+
+/**
+ * Upscales [src] by 2.5× before passing it to ML Kit.
+ * Card codes are small text that sits below ML Kit's reliable recognition threshold at
+ * native camera resolution, so upscaling significantly improves detection accuracy.
+ */
+fun preprocessBitmap(src: Bitmap): Bitmap {
+    val scale = 2.5f
+    val matrix = Matrix().apply { postScale(scale, scale) }
+    return Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
+}
+
+/**
+ * Converts a CameraX [ImageProxy] (RGBA_8888 format) to a correctly oriented [Bitmap]
+ * by applying the frame's reported rotation before returning.
+ */
+fun ImageProxy.toBitmap(): Bitmap {
+    val buffer: ByteBuffer = planes[0].buffer
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    bitmap.copyPixelsFromBuffer(buffer)
+    val matrix = Matrix().apply { postRotate(imageInfo.rotationDegrees.toFloat()) }
+    return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+}
+
+// ─── Camera helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Starts combined autofocus (AF) and autoexposure (AE) metering locked to the centre of
+ * the preview surface. [setAutoCancelDuration] causes the camera to re-evaluate focus
+ * every 3 seconds, keeping the scan area sharp as cards are repositioned.
+ */
+fun triggerContinuousAutofocus(cameraControl: CameraControl?, previewView: PreviewView) {
+    cameraControl ?: return
+    val meteringPoint = previewView.meteringPointFactory.createPoint(0.5f, 0.5f)
+    val action = FocusMeteringAction.Builder(
+        meteringPoint,
+        FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
+    )
+        .setAutoCancelDuration(3, TimeUnit.SECONDS)
+        .build()
+    cameraControl.startFocusAndMetering(action)
+}
+
+// ─── Card list helpers ────────────────────────────────────────────────────────
+
+/**
+ * Returns all [Card] objects whose code matches [code] (case-insensitive).
+ * This includes every rarity and alternate art for that base code.
+ */
+fun matchingCards(code: String, allCards: List<Card>): List<Card> =
+    allCards.filter { it.code.equals(code, ignoreCase = true) }
+
+/**
+ * Derives the list of [CardVariant]s that actually exist for a given set of [cards],
+ * ordered to match the canonical RARITY_OPTIONS order defined in the enum.
+ * UNKNOWN is always excluded since it is not a real database rarity.
+ */
+fun availableVariantsFor(cards: List<Card>): List<CardVariant> {
+    val present = cards.mapNotNull { CardVariant.fromRarity(it.rarity) }.toSet()
+    return CardVariant.entries.filter { it != CardVariant.UNKNOWN && it in present }
+}
+
+/**
+ * Resolves which [Card] object should be displayed for a given [entry].
+ * Priority:
+ *   1. If the user has pinned a specific art ([CardEntry.selectedCardId] is set), use that.
+ *   2. If the variant is UNKNOWN (freshly scanned), fall back to the first available card
+ *      so the thumbnail shows something rather than a grey placeholder.
+ *   3. Otherwise find the first card whose rarity maps to the entry's variant.
+ */
+fun resolveCardEntity(entry: CardEntry, cards: List<Card>): Card? = when {
+    entry.selectedCardId != null       -> cards.find { it.id == entry.selectedCardId }
+    entry.variant == CardVariant.UNKNOWN -> cards.firstOrNull()
+    else -> cards.find { CardVariant.fromRarity(it.rarity) == entry.variant }
+}
+
+/**
+ * Applies a variant or alternate-art selection made in the picker dialog.
+ * Removes the old map entry at [oldKey], then either merges quantity into an existing
+ * entry at [newKey] or inserts a fresh one. Returns the updated map.
+ */
+fun applyVariantSelection(
+    detectedCards: LinkedHashMap<String, CardEntry>,
+    oldKey: String,
+    newKey: String,
+    entry: CardEntry,
+    variant: CardVariant,
+    cardId: Int
+): LinkedHashMap<String, CardEntry> {
+    val updated = LinkedHashMap(detectedCards)
+    updated.remove(oldKey)
+    val existing = updated[newKey]
+    updated[newKey] = if (existing != null) {
+        existing.copy(quantity = existing.quantity + entry.quantity)
+    } else {
+        entry.copy(variant = variant, selectedCardId = cardId)
+    }
+    return updated
+}
+
+// ─── Composables ─────────────────────────────────────────────────────────────
+
+/**
+ * A single card-art tile shown inside the variant picker dialog.
+ * Displays the card image with an aspect-ratio-correct frame, a coloured border when
+ * selected, and an "Alt N" subtitle when the variant has more than one art.
+ */
+@Composable
+private fun VariantArtTile(
+    card: Card,
+    isSelected: Boolean,
+    altIndex: Int,
+    showAltLabel: Boolean,
+    imageLoader: ImageLoader,
+    colorPrimary: androidx.compose.ui.graphics.Color,
+    colorOnSurfaceVariant: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(90.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) colorPrimary else colorOnSurfaceVariant.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(8.dp)
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(card.imageUrl)
+                .diskCachePolicy(CachePolicy.ENABLED)
+                .memoryCachePolicy(CachePolicy.ENABLED)
+                .crossfade(true)
+                .scale(Scale.FIT)
+                .build(),
+            imageLoader = imageLoader,
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.72f)
+                .clip(RoundedCornerShape(6.dp))
+                .background(colorOnSurfaceVariant.copy(alpha = 0.1f))
+        )
+        if (showAltLabel) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Alt $altIndex",
+                fontSize = 11.sp,
+                color = if (isSelected) colorPrimary else colorOnSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+/**
+ * A section inside the picker dialog for a single [variant].
+ * Shows the rarity label as a section header, then a horizontally scrollable row of
+ * [VariantArtTile]s — one per alternate art that exists for this variant.
+ */
+@Composable
+private fun VariantSection(
+    variant: CardVariant,
+    variantCards: List<Card>,
+    entry: CardEntry,
+    imageLoader: ImageLoader,
+    colorPrimary: androidx.compose.ui.graphics.Color,
+    colorOnSurface: androidx.compose.ui.graphics.Color,
+    colorOnSurfaceVariant: androidx.compose.ui.graphics.Color,
+    onSelect: (Card) -> Unit
+) {
+    Text(
+        text = variant.label,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = if (variant == entry.variant) colorPrimary else colorOnSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp, bottom = 6.dp)
+    )
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.horizontalScroll(rememberScrollState())
+    ) {
+        variantCards.forEachIndexed { index, variantCard ->
+            val isSelected = variant == entry.variant &&
+                    (entry.selectedCardId == variantCard.id ||
+                            (entry.selectedCardId == null && index == 0))
+            VariantArtTile(
+                card = variantCard,
+                isSelected = isSelected,
+                altIndex = index + 1,
+                showAltLabel = variantCards.size > 1,
+                imageLoader = imageLoader,
+                colorPrimary = colorPrimary,
+                colorOnSurfaceVariant = colorOnSurfaceVariant,
+                onClick = { onSelect(variantCard) }
+            )
+        }
+    }
+}
+
+/**
+ * The full-screen dialog shown when the user taps the rarity badge.
+ * Iterates over all [availableVariants] for the card and renders a [VariantSection]
+ * for each, allowing the user to pick both a rarity tier and a specific alternate art.
+ * Dismissed by tapping outside or selecting a tile.
+ */
+@Composable
+private fun VariantPickerDialog(
+    entry: CardEntry,
+    allMatchingCards: List<Card>,
+    availableVariants: List<CardVariant>,
+    imageLoader: ImageLoader,
+    colorPrimary: androidx.compose.ui.graphics.Color,
+    colorOnSurface: androidx.compose.ui.graphics.Color,
+    colorOnSurfaceVariant: androidx.compose.ui.graphics.Color,
+    onDismiss: () -> Unit,
+    onSelect: (CardVariant, Card) -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Select Rarity",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                availableVariants.forEach { variant ->
+                    val variantCards = allMatchingCards.filter {
+                        CardVariant.fromRarity(it.rarity) == variant
+                    }
+                    VariantSection(
+                        variant = variant,
+                        variantCards = variantCards,
+                        entry = entry,
+                        imageLoader = imageLoader,
+                        colorPrimary = colorPrimary,
+                        colorOnSurface = colorOnSurface,
+                        colorOnSurfaceVariant = colorOnSurfaceVariant,
+                        onSelect = { card -> onSelect(variant, card) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A single row in the scanned-card list.
+ * Shows a thumbnail, the card code, a tappable rarity badge, a quantity counter, and
+ * +/- buttons. The badge opens [VariantPickerDialog] when tapped. Decrementing quantity
+ * to zero removes the row entirely.
+ */
+@Composable
+private fun CardRow(
+    mapKey: String,
+    entry: CardEntry,
+    allCards: List<Card>,
+    imageLoader: ImageLoader,
+    colorOnSurface: androidx.compose.ui.graphics.Color,
+    colorOnSurfaceVariant: androidx.compose.ui.graphics.Color,
+    colorPrimary: androidx.compose.ui.graphics.Color,
+    colorError: androidx.compose.ui.graphics.Color,
+    onDetectedCardsChange: (LinkedHashMap<String, CardEntry>) -> Unit,
+    currentDetectedCards: LinkedHashMap<String, CardEntry>,
+    onCodeDetected: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val cards = remember(entry.code, allCards) { matchingCards(entry.code, allCards) }
+    val availableVariants = remember(entry.code, allCards) { availableVariantsFor(cards) }
+    val cardEntity = remember(entry.code, entry.variant, entry.selectedCardId, allCards) {
+        resolveCardEntity(entry, cards)
+    }
+    var pickerVisible by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(cardEntity?.imageUrl)
+                .diskCachePolicy(CachePolicy.ENABLED)
+                .memoryCachePolicy(CachePolicy.ENABLED)
+                .crossfade(true)
+                .scale(Scale.FIT)
+                .build(),
+            imageLoader = imageLoader,
+            contentDescription = entry.code,
+            modifier = Modifier
+                .width(36.dp)
+                .aspectRatio(0.72f)
+                .clip(RoundedCornerShape(4.dp))
+                .background(colorOnSurfaceVariant.copy(alpha = 0.1f))
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Text(
+            entry.code,
+            color = colorOnSurface,
+            fontSize = 14.sp,
+            modifier = Modifier.weight(1f)
+        )
+
+        // Rarity badge — red/dashed when UNKNOWN to prompt the user to assign a rarity.
+        Box(
+            modifier = Modifier
+                .width(56.dp)
+                .border(
+                    width = 1.dp,
+                    color = if (entry.variant == CardVariant.UNKNOWN)
+                        colorError.copy(alpha = 0.6f)
+                    else
+                        colorOnSurfaceVariant.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(4.dp)
+                )
+                .clickable { pickerVisible = true }
+                .padding(vertical = 6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = entry.variant.label,
+                color = when (entry.variant) {
+                    CardVariant.UNKNOWN -> colorError
+                    else -> if (entry.variant.rarityKey.startsWith("p-") || entry.variant == CardVariant.SP)
+                        colorPrimary else colorOnSurface
+                },
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        if (pickerVisible) {
+            VariantPickerDialog(
+                entry = entry,
+                allMatchingCards = cards,
+                availableVariants = availableVariants,
+                imageLoader = imageLoader,
+                colorPrimary = colorPrimary,
+                colorOnSurface = colorOnSurface,
+                colorOnSurfaceVariant = colorOnSurfaceVariant,
+                onDismiss = { pickerVisible = false },
+                onSelect = { variant, card ->
+                    pickerVisible = false
+                    val newKey = cardKey(entry.code, variant, card.id)
+                    onDetectedCardsChange(
+                        applyVariantSelection(currentDetectedCards, mapKey, newKey, entry, variant, card.id)
+                    )
+                }
+            )
+        }
+
+        Text(
+            "x${entry.quantity}",
+            color = colorOnSurface,
+            fontSize = 15.sp,
+            modifier = Modifier.width(40.dp),
+            textAlign = TextAlign.Center
+        )
+
+        Row(modifier = Modifier.width(88.dp)) {
+            IconButton(
+                onClick = {
+                    val updated = LinkedHashMap(currentDetectedCards)
+                    updated[mapKey] = entry.copy(quantity = entry.quantity + 1)
+                    onDetectedCardsChange(updated)
+                    onCodeDetected(entry.code)
+                },
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "Add ${entry.code}", tint = colorPrimary)
+            }
+            IconButton(
+                onClick = {
+                    val updated = LinkedHashMap(currentDetectedCards)
+                    val newQty = entry.quantity - 1
+                    if (newQty <= 0) updated.remove(mapKey) else updated[mapKey] = entry.copy(quantity = newQty)
+                    onDetectedCardsChange(updated)
+                },
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(Icons.Filled.Remove, contentDescription = "Remove ${entry.code}", tint = colorError)
+            }
+        }
+    }
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
+/**
+ * Main scan screen. The top 40% of the screen is a live camera preview with a grey guide
+ * box marking the OCR scan region. The bottom 60% is a scrollable list of scanned cards
+ * with rarity assignment, quantity controls, and a Scan/Working button.
+ *
+ * On each camera frame, OCR is attempted while [buttonWorking] is true. When a code is
+ * found the entry is added to [detectedCards] with [CardVariant.UNKNOWN] so the user must
+ * manually confirm the rarity via the badge picker before it stacks with other entries.
+ */
 @Composable
 fun OnePieceCardScan(
     modifier: Modifier = Modifier,
     audioManager: AudioManager,
+    imageLoader: ImageLoader,
+    viewModel: CatalogViewModel,
     onBack: () -> Unit = {},
     onCodeDetected: (String) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = rememberUpdatedState(LocalContext.current as androidx.lifecycle.LifecycleOwner)
+    val catalogState by viewModel.state.collectAsState()
+    val allCards = catalogState.allCards
 
     val previewView = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
     val cameraExecutor: ExecutorService = remember { Executors.newSingleThreadExecutor() }
     val recognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
 
     var latestFrameBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    // Tracks the current scan lifecycle: idle → scanning → done or retry
     var scanningState by remember { mutableStateOf("idle") }
-    // Drives the button label independently of scanningState so internal retry churn
-    // (scanning → retry → scanning → ...) doesn't cause the button to flicker.
     var buttonWorking by remember { mutableStateOf(false) }
     var cameraControl: CameraControl? by remember { mutableStateOf<CameraControl?>(null) }
-    // Maps each detected card code to its entry (quantity + variant). Preserves insertion order.
     var detectedCards by remember { mutableStateOf(linkedMapOf<String, CardEntry>()) }
-    // Guards against concurrent OCR calls when frames arrive faster than processing completes
     var isProcessing by remember { mutableStateOf(false) }
 
-    // Snapshot theme colors once so composable lambdas below can reference them safely.
-    val colorBackground = MaterialTheme.colorScheme.background
-    val colorOnSurface = MaterialTheme.colorScheme.onSurface
-    val colorOnSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
-    val colorPrimary = MaterialTheme.colorScheme.primary
-    val colorError = MaterialTheme.colorScheme.error
+    val colorBackground        = MaterialTheme.colorScheme.background
+    val colorOnSurface         = MaterialTheme.colorScheme.onSurface
+    val colorOnSurfaceVariant  = MaterialTheme.colorScheme.onSurfaceVariant
+    val colorPrimary           = MaterialTheme.colorScheme.primary
+    val colorError             = MaterialTheme.colorScheme.error
 
     DisposableEffect(Unit) { onDispose { cameraExecutor.shutdown() } }
 
-    // Runs OCR on each new camera frame, but only while the user has actively triggered a scan
-    // (buttonWorking == true). Skips if a recognition pass is already in progress or a code
-    // has been found. Crops and upscales the frame before passing to ML Kit.
+    // OCR effect — fires on every new camera frame while a scan is active.
     LaunchedEffect(latestFrameBitmap) {
         val bitmap = latestFrameBitmap ?: return@LaunchedEffect
         if (!buttonWorking || isProcessing || scanningState == "done") return@LaunchedEffect
@@ -99,28 +609,19 @@ fun OnePieceCardScan(
         isProcessing = true
         scanningState = "scanning"
 
-        val croppedBitmap = cropCenterStrip(bitmap)
-        val upscaledBitmap = preprocessBitmap(croppedBitmap)
-        val inputImage = InputImage.fromBitmap(upscaledBitmap, 0)
+        val inputImage = InputImage.fromBitmap(preprocessBitmap(cropCenterStrip(bitmap)), 0)
 
         recognizer.process(inputImage)
             .addOnSuccessListener { visionText ->
-                val rawText = visionText.text
-
-                // Extracts the base card code only. Variant is always set to NORMAL on scan
-                // and can be adjusted manually by tapping the variant badge in the card list.
-                val codeRegex = Regex("""[A-Z][A-Z0-9][0-9O]{2}[-–][0-9O]{3}""")
-                val code = codeRegex.find(rawText)?.value
-                    ?.replace('–', '-')
-                    ?.replace('O', '0')
-
+                val code = extractCardCode(visionText.text)
                 if (code != null) {
                     val updated = LinkedHashMap(detectedCards)
-                    val existing = updated[code]
-                    updated[code] = if (existing != null) {
+                    val key = cardKey(code, CardVariant.UNKNOWN)
+                    val existing = updated[key]
+                    updated[key] = if (existing != null) {
                         existing.copy(quantity = existing.quantity + 1)
                     } else {
-                        CardEntry(quantity = 1)
+                        CardEntry(code = code, quantity = 1, variant = CardVariant.UNKNOWN)
                     }
                     detectedCards = updated
                     scanningState = "done"
@@ -135,18 +636,14 @@ fun OnePieceCardScan(
                 Log.e("OCRScan", "Text recognition error", e)
                 scanningState = "retry"
                 isProcessing = false
-                // Leave buttonWorking true so the button stays in "Working..." state and
-                // the next frame triggers another attempt automatically.
             }
     }
 
-    // Binds the camera preview and frame analysis use cases to the lifecycle, then starts
-    // continuous autofocus so the card stays sharp in the scan area.
+    // Camera setup effect — binds preview and frame-analysis use cases once on composition.
     LaunchedEffect(Unit) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
             val preview = Preview.Builder()
                 .setTargetAspectRatio(AspectRatio.RATIO_4_3)
@@ -168,7 +665,7 @@ fun OnePieceCardScan(
             cameraProvider.unbindAll()
             val camera = cameraProvider.bindToLifecycle(
                 lifecycleOwner.value,
-                cameraSelector,
+                CameraSelector.DEFAULT_BACK_CAMERA,
                 preview,
                 analysis
             )
@@ -178,15 +675,11 @@ fun OnePieceCardScan(
         }, ContextCompat.getMainExecutor(context))
     }
 
-    // Screen layout: camera preview occupies the top 40%, results and controls the bottom 60%.
-    // Wrapped in a Box so the Back FAB can float at BottomStart, matching the mute button
-    // position on MenuScreen for a seamless visual transition between the two screens.
     Box(modifier = modifier.fillMaxSize()) {
 
         Column(modifier = Modifier.fillMaxSize()) {
 
-            // Camera preview with a centered grey guide box showing the active scan region.
-            // Tapping anywhere on the preview triggers a manual autofocus at the center point.
+            // Camera preview — tapping triggers a one-shot manual autofocus at screen centre.
             Box(
                 modifier = Modifier
                     .weight(0.4f)
@@ -205,7 +698,6 @@ fun OnePieceCardScan(
                     }
             ) {
                 AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-
                 Box(
                     modifier = Modifier
                         .width(300.dp)
@@ -215,7 +707,7 @@ fun OnePieceCardScan(
                 )
             }
 
-            // Results panel showing detected card codes. Scrollable to accommodate large lists.
+            // Results panel
             Column(
                 modifier = Modifier
                     .weight(0.6f)
@@ -224,15 +716,11 @@ fun OnePieceCardScan(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Card list with quantity and variant controls. Each row shows the base code,
-                // a tappable variant badge that cycles Normal → ★ → SP → Normal, the quantity,
-                // and + / - buttons. Removing the last copy of a card removes the row entirely.
-                val scrollState = rememberScrollState()
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .verticalScroll(scrollState)
+                        .verticalScroll(rememberScrollState())
                 ) {
                     if (detectedCards.isEmpty()) {
                         Text(
@@ -242,138 +730,38 @@ fun OnePieceCardScan(
                             modifier = Modifier.align(Alignment.CenterHorizontally)
                         )
                     } else {
-                        // Header row
+                        // Header
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 4.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                "Card Name",
-                                color = colorOnSurfaceVariant,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                "Variant",
-                                color = colorOnSurfaceVariant,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.width(56.dp),
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                "Qty",
-                                color = colorOnSurfaceVariant,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.width(40.dp),
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                "Edit",
-                                color = colorOnSurfaceVariant,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.width(88.dp),
-                                textAlign = TextAlign.Center
-                            )
+                            Text("Card Name", color = colorOnSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text("Rarity",    color = colorOnSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(56.dp), textAlign = TextAlign.Center)
+                            Text("Qty",       color = colorOnSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(40.dp), textAlign = TextAlign.Center)
+                            Text("Edit",      color = colorOnSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(88.dp), textAlign = TextAlign.Center)
                         }
 
-                        detectedCards.entries.forEach { (code, entry) ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Base card code
-                                Text(
-                                    code,
-                                    color = colorOnSurface,
-                                    fontSize = 15.sp,
-                                    modifier = Modifier.weight(1f)
-                                )
-
-                                // Tappable variant badge — cycles Normal (blank) → ★ → SP on each tap.
-                                // Outlined box makes it clear the field is interactive.
-                                Box(
-                                    modifier = Modifier
-                                        .width(56.dp)
-                                        .border(
-                                            width = 1.dp,
-                                            color = colorOnSurfaceVariant.copy(alpha = 0.4f),
-                                            shape = RoundedCornerShape(4.dp)
-                                        )
-                                        .clickable {
-                                            val updated = LinkedHashMap(detectedCards)
-                                            updated[code] = entry.copy(variant = entry.variant.next())
-                                            detectedCards = updated
-                                        }
-                                        .padding(vertical = 6.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = entry.variant.label.ifEmpty { "—" },
-                                        color = if (entry.variant == CardVariant.NORMAL)
-                                            colorOnSurfaceVariant
-                                        else
-                                            colorPrimary,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-
-                                // Quantity
-                                Text(
-                                    "x${entry.quantity}",
-                                    color = colorOnSurface,
-                                    fontSize = 15.sp,
-                                    modifier = Modifier.width(40.dp),
-                                    textAlign = TextAlign.Center
-                                )
-
-                                // + and - quantity controls
-                                Row(modifier = Modifier.width(88.dp)) {
-                                    IconButton(
-                                        onClick = {
-                                            val updated = LinkedHashMap(detectedCards)
-                                            updated[code] = entry.copy(quantity = entry.quantity + 1)
-                                            detectedCards = updated
-                                            onCodeDetected(code)
-                                        },
-                                        modifier = Modifier.size(40.dp)
-                                    ) {
-                                        Icon(Icons.Filled.Add, contentDescription = "Add $code", tint = colorPrimary)
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            val updated = LinkedHashMap(detectedCards)
-                                            val newQty = entry.quantity - 1
-                                            if (newQty <= 0) updated.remove(code) else updated[code] = entry.copy(quantity = newQty)
-                                            detectedCards = updated
-                                        },
-                                        modifier = Modifier.size(40.dp)
-                                    ) {
-                                        Icon(Icons.Filled.Remove, contentDescription = "Remove $code", tint = colorError)
-                                    }
-                                }
-                            }
+                        detectedCards.entries.forEach { (mapKey, entry) ->
+                            CardRow(
+                                mapKey = mapKey,
+                                entry = entry,
+                                allCards = allCards,
+                                imageLoader = imageLoader,
+                                colorOnSurface = colorOnSurface,
+                                colorOnSurfaceVariant = colorOnSurfaceVariant,
+                                colorPrimary = colorPrimary,
+                                colorError = colorError,
+                                onDetectedCardsChange = { detectedCards = it },
+                                currentDetectedCards = detectedCards,
+                                onCodeDetected = onCodeDetected
+                            )
                         }
                     }
                 }
 
-                // Scan button pinned to the bottom center of the results panel.
-                // "Scan" — waiting for user to trigger.
-                // "Working..." — actively cycling through frames until a code is found.
-                // Pressing while working cancels the active scan.
+                // Scan / Working button
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                 ) {
                     SfxButton(
                         audio = audioManager,
@@ -395,8 +783,6 @@ fun OnePieceCardScan(
             }
         }
 
-        // Back FAB floats at BottomStart, mirroring the mute button position on MenuScreen
-        // so the button appears in the same spot during navigation between the two screens.
         SfxFAB(
             audio = audioManager,
             onClick = onBack,
@@ -407,54 +793,4 @@ fun OnePieceCardScan(
             Text("Back", fontSize = 14.sp)
         }
     }
-}
-
-// Crops the center horizontal strip of a camera frame to match the grey guide box region.
-// Uses percentage-based coordinates (80% wide, 30% tall, vertically centered) and clamps
-// values to prevent out-of-bounds crashes on unusual frame dimensions.
-fun cropCenterStrip(bitmap: Bitmap): Bitmap {
-    val cropLeft   = (bitmap.width  * 0.10f).toInt()
-    val cropWidth  = (bitmap.width  * 0.80f).toInt()
-    val cropTop    = (bitmap.height * 0.35f).toInt()
-    val cropHeight = (bitmap.height * 0.30f).toInt()
-
-    val safeLeft   = cropLeft.coerceIn(0, bitmap.width - 1)
-    val safeTop    = cropTop.coerceIn(0, bitmap.height - 1)
-    val safeWidth  = cropWidth.coerceAtMost(bitmap.width - safeLeft)
-    val safeHeight = cropHeight.coerceAtMost(bitmap.height - safeTop)
-
-    return Bitmap.createBitmap(bitmap, safeLeft, safeTop, safeWidth, safeHeight)
-}
-
-// Scales the cropped bitmap up by 2.5× before passing it to ML Kit. Camera frames contain
-// small text that sits below ML Kit's reliable recognition threshold at native resolution.
-fun preprocessBitmap(src: Bitmap): Bitmap {
-    val scale = 2.5f
-    val matrix = Matrix().apply { postScale(scale, scale) }
-    return Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
-}
-
-// Starts autofocus and autoexposure metering locked to the center of the preview.
-// The auto-cancel duration causes the camera to re-evaluate focus every 3 seconds,
-// keeping the scan area sharp as the card is repositioned.
-fun triggerContinuousAutofocus(cameraControl: CameraControl?, previewView: PreviewView) {
-    cameraControl ?: return
-    val meteringPoint = previewView.meteringPointFactory.createPoint(0.5f, 0.5f)
-    val action = FocusMeteringAction.Builder(
-        meteringPoint,
-        FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
-    )
-        .setAutoCancelDuration(3, TimeUnit.SECONDS)
-        .build()
-    cameraControl.startFocusAndMetering(action)
-}
-
-// Converts a CameraX ImageProxy (RGBA_8888 format) to a correctly oriented Bitmap
-// by applying the frame's reported rotation before returning.
-fun ImageProxy.toBitmap(): Bitmap {
-    val buffer: ByteBuffer = planes[0].buffer
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-    bitmap.copyPixelsFromBuffer(buffer)
-    val matrix = Matrix().apply { postRotate(imageInfo.rotationDegrees.toFloat()) }
-    return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
 }

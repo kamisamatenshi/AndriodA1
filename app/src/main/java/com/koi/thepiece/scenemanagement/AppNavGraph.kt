@@ -13,6 +13,11 @@ import com.koi.thepiece.ui.screens.OnePieceCardScan
 import com.koi.thepiece.ui.screens.Scan
 import com.koi.thepiece.ui.screens.SettingsScreen
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogScreen
+import android.app.Application
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
+import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModelFactory
 
 @Composable
 fun AppNavGraph(
@@ -62,8 +67,12 @@ fun AppNavGraph(
                 }
 
                 Route.OCRScan -> NavEntry(key) {
+                    val app = LocalContext.current.applicationContext as Application
+                    val scanViewModel: CatalogViewModel = viewModel(factory = CatalogViewModelFactory(app))
                     OnePieceCardScan(
                         audioManager = audioManager,
+                        imageLoader = imageLoader,
+                        viewModel = scanViewModel,
                         onBack = { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) },
                         onCodeDetected = { code ->
                             Log.d("OCRScanRoute", "Card code detected: $code")
