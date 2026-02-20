@@ -49,9 +49,14 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
 
 
     // -------- Filters / Search --------
-    fun setColorOrType(value: String) {
-        _state.update { it.copy(colorOrType = value, page = 1) }
+    fun setColor(value: String) {
+        _state.update { it.copy(color = value, page = 1) }
     }
+
+    fun setCardType(value: String) {
+        _state.update { it.copy(cardType = value, page = 1) }
+    }
+
 
     fun setSetFilter(value: String) {
         _state.update { it.copy(setFilter = value, page = 1) }
@@ -101,10 +106,13 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
 
         return s.allCards.asSequence()
             .filter { c ->
-                val matchColorOrType =
-                    s.colorOrType == "all" ||
-                            c.color.equals(s.colorOrType, ignoreCase = true) ||
-                            c.type.equals(s.colorOrType, ignoreCase = true)
+                val matchColor =
+                    s.color == "all" ||
+                            c.color.equals(s.color, ignoreCase = true)
+
+                val matchCardType =
+                    s.cardType =="all" ||
+                            c.type.equals(s.cardType, ignoreCase = true)
 
                 val matchSet =
                     s.setFilter == "all" ||
@@ -122,7 +130,7 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
                             c.name.lowercase().contains(q) ||
                             (c.traits ?: "").lowercase().contains(q)
 
-                matchColorOrType && matchSet && matchRarity && matchSearch
+                matchColor && matchSet && matchRarity && matchSearch&&matchCardType
             }
             .toList()
     }

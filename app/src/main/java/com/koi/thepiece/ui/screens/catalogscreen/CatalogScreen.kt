@@ -52,25 +52,28 @@ fun CatalogScreen(
     var viewMode by rememberSaveable { mutableStateOf(CatalogViewMode.GRID) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
 
-    val cards = remember(s.allCards, s.colorOrType, s.setFilter, s.rarityFilter, s.searchQuery, s.page, s.pageSize) {
+    val cards = remember(s.allCards, s.color , s.cardType , s.setFilter, s.rarityFilter, s.searchQuery, s.page, s.pageSize) {
         vm.pagedCards(s)
     }
-    val totalPages = remember(s.allCards, s.colorOrType, s.setFilter, s.rarityFilter, s.searchQuery, s.pageSize) {
+    val totalPages = remember(s.allCards, s.color, s.cardType, s.setFilter, s.rarityFilter, s.searchQuery, s.pageSize) {
         vm.totalPages(s)
     }
 
     if (showFilters) {
         FilterBottomSheet(
             currentSet = s.setFilter,
-            currentColorOrType = s.colorOrType,
+            currentColor = s.color,
             currentRarity = s.rarityFilter,
+            currentType = s.cardType,
             onSetChange = vm::setSetFilter,
-            onColorOrTypeChange = vm::setColorOrType,
+            onColorChange = vm::setColor,
+            onCardTypeChange = vm::setCardType,
             onRarityChange = vm::setRarityFilter,
             onClear = {
-                vm.setSetFilter("OP01")
-                vm.setColorOrType("all")
+                vm.setSetFilter("all")
+                vm.setColor("all")
                 vm.setRarityFilter("all")
+                vm.setCardType("all")
             },
             onDismiss = { showFilters = false }
         )
