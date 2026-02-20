@@ -23,7 +23,7 @@ data class CatalogUiState(
 
     // modal
     val selected: Card? = null,
-    val selectedID: Int? = null
+    val selectedID: Int? = null,
 
     val price: Int =0
 )

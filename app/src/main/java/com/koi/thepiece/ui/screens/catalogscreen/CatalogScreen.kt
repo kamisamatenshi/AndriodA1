@@ -1,6 +1,7 @@
 package com.koi.thepiece.ui.screens.catalogscreen
 
 import android.app.Application
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -190,17 +191,9 @@ fun CatalogScreen(
                 imageLoader = imageLoader,
                 onDismiss = vm::closeModal,
                 onPlus = { vm.incrementQty(selectedCard) },
-                onMinus = { vm.decrementQty(selectedCard) }
+                onMinus = { vm.decrementQty(selectedCard) },
+                vm
             )
         }
-        /*if (s.selected != null) {
-            CardPreviewDialog(
-                card = s.selected!!,
-                imageLoader = imageLoader,
-                onDismiss = vm::closeModal,
-                onPlus = { vm.incrementQty(s.selected!!) },
-                onMinus = { vm.decrementQty(s.selected!!) }
-            )
-        }*/
     }
 }
