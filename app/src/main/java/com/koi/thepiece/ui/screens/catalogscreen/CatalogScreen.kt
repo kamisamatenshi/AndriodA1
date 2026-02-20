@@ -124,7 +124,8 @@ fun CatalogScreen(
             CatalogHeaderBlock(
                 setCode = s.setFilter,
                 loading = s.loading,
-                error = s.error
+                error = s.error,
+                viewModel = vm
             )
 
             SearchBarRow(

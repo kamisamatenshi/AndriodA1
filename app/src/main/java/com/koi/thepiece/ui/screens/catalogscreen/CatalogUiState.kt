@@ -21,7 +21,7 @@ data class CatalogUiState(
     val searchQueryJa: String = "",
 
     // paging
-    val pageSize: Int = 30,
+    val pageSize: Int = 20,
     val page: Int = 1,
 
     // modal

@@ -51,6 +51,7 @@ import com.koi.thepiece.data.model.Card
 import com.koi.thepiece.ui.components.SfxButton
 import com.koi.thepiece.ui.components.SfxFAB
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
+import com.koi.thepiece.ui.screens.catalogscreen.components.QtyBadge
 import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -84,7 +85,8 @@ data class CardEntry(
     val code: String,
     val quantity: Int,
     val variant: CardVariant = CardVariant.UNKNOWN,
-    val selectedCardId: Int? = null
+    val selectedCardId: Int? = null,
+    var ownedQty: Int,
 )
 
 fun cardKey(code: String, variant: CardVariant, cardId: Int? = null) =
@@ -155,10 +157,26 @@ fun availableVariantsFor(cards: List<Card>): List<CardVariant> {
     return CardVariant.entries.filter { it != CardVariant.UNKNOWN && it in present }
 }
 
-fun resolveCardEntity(entry: CardEntry, cards: List<Card>): Card? = when {
-    entry.selectedCardId != null         -> cards.find { it.id == entry.selectedCardId }
-    entry.variant == CardVariant.UNKNOWN -> cards.firstOrNull()
-    else -> cards.find { CardVariant.fromRarity(it.rarity) == entry.variant }
+fun resolveCardEntity(entry: CardEntry, cards: List<Card>): Card? {
+
+    val resolved = when {
+        entry.selectedCardId != null ->
+            cards.find { it.id == entry.selectedCardId }
+
+        entry.variant == CardVariant.UNKNOWN ->
+            cards.firstOrNull()
+
+        else ->
+            cards.find { CardVariant.fromRarity(it.rarity) == entry.variant }
+    }
+
+
+    entry.ownedQty = when {
+        entry.variant == CardVariant.UNKNOWN -> 0
+        else -> resolved?.ownedQty ?: 0
+    }
+
+    return resolved
 }
 
 fun applyVariantSelection(
@@ -352,7 +370,7 @@ private fun CardRow(
     val context = LocalContext.current
     val cards = remember(entry.code, allCards) { matchingCards(entry.code, allCards) }
     val availableVariants = remember(entry.code, allCards) { availableVariantsFor(cards) }
-    val cardEntity = remember(entry.code, entry.variant, entry.selectedCardId, allCards) {
+    val cardEntity = remember(entry.code, entry.variant, entry.selectedCardId, entry.ownedQty, allCards) {
         resolveCardEntity(entry, cards)
     }
     var pickerVisible by remember { mutableStateOf(false) }
@@ -384,23 +402,34 @@ private fun CardRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Thumbnail
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(cardEntity?.imageUrl)
-                .diskCachePolicy(CachePolicy.ENABLED)
-                .memoryCachePolicy(CachePolicy.ENABLED)
-                .crossfade(true)
-                .scale(Scale.FIT)
-                .build(),
-            imageLoader = imageLoader,
-            contentDescription = entry.code,
+        Box(
             modifier = Modifier
                 .width(36.dp)
                 .aspectRatio(0.72f)
-                .clip(RoundedCornerShape(4.dp))
-                .background(colorOnSurfaceVariant.copy(alpha = 0.1f))
-        )
-
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(cardEntity?.imageUrl)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .crossfade(true)
+                    .scale(Scale.FIT)
+                    .build(),
+                imageLoader = imageLoader,
+                contentDescription = entry.code,
+                modifier = Modifier
+                    .width(36.dp)
+                    .aspectRatio(0.72f)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(colorOnSurfaceVariant.copy(alpha = 0.1f))
+            )
+            QtyBadge(
+                qty = cardEntity?.ownedQty ?: 0,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 4.dp, y = (-4).dp)
+            )
+        }
         Spacer(modifier = Modifier.width(8.dp))
 
         // Card code
@@ -679,7 +708,7 @@ fun OnePieceCardScan(
                     updated[key] = if (existing != null) {
                         existing.copy(quantity = existing.quantity + 1)
                     } else {
-                        CardEntry(code = code, quantity = 1, variant = CardVariant.UNKNOWN)
+                        CardEntry(code = code, quantity = 1, variant = CardVariant.UNKNOWN , ownedQty = 0)
                     }
                     viewModel.updateDetectedCards(updated)
                     scanningState = "done"

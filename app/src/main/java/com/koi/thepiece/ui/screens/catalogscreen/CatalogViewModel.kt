@@ -6,8 +6,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.koi.thepiece.AppGraph
 import com.koi.thepiece.data.model.Card
+import com.koi.thepiece.data.repo.SetCompletion
 import com.koi.thepiece.ui.screens.CardEntry
 import com.koi.thepiece.ui.screens.CardVariant
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -194,6 +196,11 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
             ?.first
             ?: "all"
     }
+
+    fun observeSetCompletion(cardSet: String): Flow<SetCompletion> {
+        return repo.observeSetCompletion(cardSet)
+    }
+
 
     fun fetchPrice(cardUrl: String?) {
         if (cardUrl.isNullOrBlank()) return
