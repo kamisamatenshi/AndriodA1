@@ -327,16 +327,24 @@ private fun VariantPickerDialog(
     }
 }
 
+/**
+ * A single row in the scanned-card list.
+ * Price is fetched via fetchPrice2 using the first matching card's yuyuUrl,
+ * exactly mirroring how CardTileGrid fetches it — so the result is already
+ * cached in the ViewModel's prices map if the catalog was visited first.
+ */
 @Composable
 private fun CardRow(
     mapKey: String,
     entry: CardEntry,
     allCards: List<Card>,
+    viewModel: CatalogViewModel,
     imageLoader: ImageLoader,
     colorOnSurface: androidx.compose.ui.graphics.Color,
     colorOnSurfaceVariant: androidx.compose.ui.graphics.Color,
     colorPrimary: androidx.compose.ui.graphics.Color,
     colorError: androidx.compose.ui.graphics.Color,
+    useSgd: Boolean,
     onDetectedCardsChange: (LinkedHashMap<String, CardEntry>) -> Unit,
     currentDetectedCards: LinkedHashMap<String, CardEntry>,
     onCodeDetected: (String) -> Unit
@@ -349,12 +357,33 @@ private fun CardRow(
     }
     var pickerVisible by remember { mutableStateOf(false) }
 
+    // Resolve yuyuUrl from the variant-specific card so price updates when rarity changes.
+    // While variant is UNKNOWN we show "—" — price is meaningless until rarity is picked.
+    val priceUrl = remember(entry.variant, entry.selectedCardId, cardEntity) {
+        if (entry.variant == CardVariant.UNKNOWN) null else cardEntity?.yuyuUrl
+    }
+    val prices by viewModel.prices.collectAsState()
+
+    LaunchedEffect(priceUrl) {
+        viewModel.fetchPrice2(priceUrl)
+    }
+
+    val priceYen = if (!priceUrl.isNullOrBlank()) prices[priceUrl] else null
+    val priceText = when {
+        entry.variant == CardVariant.UNKNOWN -> "—"
+        priceUrl.isNullOrBlank()             -> "N/A"
+        priceYen == null                     -> "..."
+        useSgd -> "S${"$"}${"%.2f".format(priceYen / 115.0)}"
+        else   -> "¥$priceYen"
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Thumbnail
         AsyncImage(
             model = ImageRequest.Builder(context)
                 .data(cardEntity?.imageUrl)
@@ -374,6 +403,7 @@ private fun CardRow(
 
         Spacer(modifier = Modifier.width(8.dp))
 
+        // Card code
         Text(
             entry.code,
             color = colorOnSurface,
@@ -381,6 +411,7 @@ private fun CardRow(
             modifier = Modifier.weight(1f)
         )
 
+        // Rarity badge
         Box(
             modifier = Modifier
                 .width(56.dp)
@@ -429,14 +460,26 @@ private fun CardRow(
             )
         }
 
+        // Price
+        Text(
+            text = priceText,
+            color = if (priceYen != null) colorOnSurface else colorOnSurfaceVariant,
+            fontSize = 12.sp,
+            modifier = Modifier.width(52.dp),
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
+
+        // Quantity
         Text(
             "x${entry.quantity}",
             color = colorOnSurface,
             fontSize = 15.sp,
-            modifier = Modifier.width(40.dp),
+            modifier = Modifier.width(36.dp),
             textAlign = TextAlign.Center
         )
 
+        // +/- buttons
         Row(modifier = Modifier.width(88.dp)) {
             IconButton(
                 onClick = {
@@ -466,11 +509,6 @@ private fun CardRow(
 
 // ─── Save confirmation dialog ─────────────────────────────────────────────────
 
-/**
- * Shows a summary of what will be saved.
- * If any entries still have UNKNOWN rarity they are listed as a warning — the user
- * can still confirm (those entries will be skipped) or go back and fix them first.
- */
 @Composable
 private fun SaveConfirmDialog(
     entries: List<CardEntry>,
@@ -480,16 +518,14 @@ private fun SaveConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val unknownEntries = entries.filter { it.variant == CardVariant.UNKNOWN }
+    val unknownEntries  = entries.filter { it.variant == CardVariant.UNKNOWN }
     val saveableEntries = entries.filter { it.variant != CardVariant.UNKNOWN }
-    val hasUnknown = unknownEntries.isNotEmpty()
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Save to Collection?", fontWeight = FontWeight.SemiBold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Saveable summary
                 if (saveableEntries.isNotEmpty()) {
                     Text(
                         "${saveableEntries.size} card${if (saveableEntries.size > 1) "s" else ""} will be added to your collection:",
@@ -504,12 +540,10 @@ private fun SaveConfirmDialog(
                         )
                     }
                 }
-
-                // Unknown warning
-                if (hasUnknown) {
+                if (unknownEntries.isNotEmpty()) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "⚠ The following ${unknownEntries.size} entr${if (unknownEntries.size > 1) "ies" else "y"} have no rarity assigned and will be skipped:",
+                        "⚠ ${unknownEntries.size} entr${if (unknownEntries.size > 1) "ies" else "y"} have no rarity and will be skipped:",
                         fontSize = 13.sp,
                         color = colorError,
                         fontWeight = FontWeight.SemiBold
@@ -522,8 +556,6 @@ private fun SaveConfirmDialog(
                         )
                     }
                 }
-
-                // Nothing to save at all
                 if (saveableEntries.isEmpty()) {
                     Text(
                         "No cards with a rarity assigned. Please assign rarities before saving.",
@@ -534,10 +566,7 @@ private fun SaveConfirmDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = onConfirm,
-                enabled = saveableEntries.isNotEmpty()
-            ) {
+            TextButton(onClick = onConfirm, enabled = saveableEntries.isNotEmpty()) {
                 Text(
                     "Save",
                     fontWeight = FontWeight.SemiBold,
@@ -582,6 +611,7 @@ fun OnePieceCardScan(
     var isProcessing by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var showSaveConfirm by remember { mutableStateOf(false) }
+    var useSgd by remember { mutableStateOf(false) }
 
     val colorBackground       = MaterialTheme.colorScheme.background
     val colorOnSurface        = MaterialTheme.colorScheme.onSurface
@@ -771,14 +801,31 @@ fun OnePieceCardScan(
                             Text("Reset Scanned Cards", fontWeight = FontWeight.SemiBold)
                         }
 
-                        // Header row
+                        // Header row with currency toggle
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text("Card Name", color = colorOnSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                             Text("Rarity",    color = colorOnSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(56.dp), textAlign = TextAlign.Center)
-                            Text("Qty",       color = colorOnSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(40.dp), textAlign = TextAlign.Center)
+                            // Currency toggle button inline with header
+                            Box(
+                                modifier = Modifier
+                                    .width(52.dp)
+                                    .border(1.dp, colorOnSurfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                                    .clickable { useSgd = !useSgd }
+                                    .padding(vertical = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (useSgd) "SGD" else "JPY",
+                                    color = colorPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                            Text("Qty",       color = colorOnSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(36.dp), textAlign = TextAlign.Center)
                             Text("Edit",      color = colorOnSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(88.dp), textAlign = TextAlign.Center)
                         }
 
@@ -787,11 +834,13 @@ fun OnePieceCardScan(
                                 mapKey = mapKey,
                                 entry = entry,
                                 allCards = allCards,
+                                viewModel = viewModel,
                                 imageLoader = imageLoader,
                                 colorOnSurface = colorOnSurface,
                                 colorOnSurfaceVariant = colorOnSurfaceVariant,
                                 colorPrimary = colorPrimary,
                                 colorError = colorError,
+                                useSgd = useSgd,
                                 onDetectedCardsChange = { viewModel.updateDetectedCards(it) },
                                 currentDetectedCards = detectedCards,
                                 onCodeDetected = onCodeDetected
