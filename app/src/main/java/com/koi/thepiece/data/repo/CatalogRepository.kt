@@ -1,6 +1,7 @@
 package com.koi.thepiece.data.repo
 
 import android.content.Context
+import android.util.Log
 import com.koi.thepiece.data.api.CatalogApi
 import com.koi.thepiece.data.api.UpdateQtyBody
 import com.koi.thepiece.data.db.CardDao
@@ -8,6 +9,7 @@ import com.koi.thepiece.data.model.Card
 import com.koi.thepiece.data.model.toDomain
 import com.koi.thepiece.data.model.toEntity
 import com.koi.thepiece.core.image.ImagePreloader
+import com.koi.thepiece.data.api.GetPriceBody
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -27,6 +29,9 @@ class CatalogRepository(
                 val now = System.currentTimeMillis()
                 val remote = api.getCards()
                 val entities = remote.mapNotNull { it.toEntity(now) }
+
+
+
                 dao.upsertAll(entities)
 
                 if (preloadFirstPageImages) {
@@ -49,6 +54,31 @@ class CatalogRepository(
                 if (res.success != true) {
                     throw IllegalStateException(res.message ?: "Server update failed")
                 }
+            }
+        }
+    }
+
+    suspend fun GetPrice(cardUrl: String?):Result<Int>{
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val res = api.getPrice(GetPriceBody(cardUrl))
+                if (res.success != true) {
+                    throw IllegalStateException(res.message ?: "Server update failed")
+                }
+                res.price ?: throw IllegalStateException("Price missing from response")
+            }
+
+        }
+
+    }
+
+    suspend fun getPrice2(cardUrl: String): Result<Int> {
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val res = api.getPrice2(cardUrl)
+                Log.d("PRICE_RAW", "Response = $res")
+                if (res.success != true) throw IllegalStateException(res.error ?: "Price fetch failed")
+                res.price ?: throw IllegalStateException("Missing price")
             }
         }
     }

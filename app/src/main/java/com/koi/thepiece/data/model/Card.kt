@@ -15,5 +15,6 @@ data class Card(
     val traits: String?,
     val cost: String?,
     val skillJp: String?,
-    val skillEn: String?
+    val skillEn: String?,
+    val price :Int?
 )

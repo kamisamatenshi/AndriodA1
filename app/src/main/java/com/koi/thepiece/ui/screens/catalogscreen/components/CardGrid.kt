@@ -4,17 +4,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -24,16 +23,28 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Scale
 import com.koi.thepiece.data.model.Card
+import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
 
 
 @Composable
- fun CardTileGrid(
+fun CardTileGrid(
     card: Card,
     imageLoader: ImageLoader,
     onClick: () -> Unit,
     onPlus: () -> Unit,
-    onMinus: () -> Unit
+    onMinus: () -> Unit,
+    viewModel: CatalogViewModel
 ) {
+
+    val prices by viewModel.prices.collectAsState()
+    val url = card.yuyuUrl
+
+    LaunchedEffect(url) {
+        viewModel.fetchPrice2(url)
+    }
+
+    val price = if (!url.isNullOrBlank()) prices[url] else null
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -79,8 +90,10 @@ import com.koi.thepiece.data.model.Card
             }
         }
 
+
+
         Text(
-            text = card.code ?: "-",
+            text = price?.let { "$it" } ?: "Loading...",
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
             maxLines = 1,
