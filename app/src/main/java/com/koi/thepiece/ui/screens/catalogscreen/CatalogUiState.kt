@@ -16,6 +16,9 @@ data class CatalogUiState(
     // search
     val searchQuery: String = "",
 
+    // search translate
+    val searchQueryJa: String = "",
+
     // paging
     val pageSize: Int = 30,
     val page: Int = 1,

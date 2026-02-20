@@ -1,6 +1,7 @@
 package com.koi.thepiece.ui.screens.catalogscreen
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.koi.thepiece.AppGraph
@@ -97,7 +98,12 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
 
     // -------- Derived lists (filter + paging) --------
     fun filteredCards(s: CatalogUiState): List<Card> {
-        val q = s.searchQuery.trim().lowercase()
+        // It normalizes the user input ->
+        // Then It checks your NAME_MAP ->
+        // Then It checks your TRAITS_MAP ->
+        // Then It returns a Set<String> of possible matches
+        val searchTokens = CatalogSearchQueryExpander.expand(s.searchQuery)
+
 
         return s.allCards.asSequence()
             .filter { c ->
@@ -112,17 +118,21 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
 
                 val selectedRarity = s.rarityFilter.trim().lowercase()
                 val cardRarity = (c.rarity ?: "").trim().lowercase()
-
                 val matchRarity =
-                    selectedRarity == "all" ||cardRarity== getRareKey( selectedRarity)
+                    selectedRarity == "all" || cardRarity == getRareKey(selectedRarity)
+
+                val code = (c.code ?: "").lowercase()
+                val name = c.name.lowercase()
+                val traits = (c.traits ?: "").lowercase()
 
                 val matchSearch =
-                    q.isEmpty() ||
-                            (c.code ?: "").lowercase().contains(q) ||
-                            c.name.lowercase().contains(q) ||
-                            (c.traits ?: "").lowercase().contains(q)
-
-                matchColorOrType && matchSet && matchRarity && matchSearch
+                    searchTokens.isEmpty() ||
+                            searchTokens.any { t ->         //search using a set of possible equivalent strings.
+                                // Search “code/name/traits” with the token.
+                                val tn = t.lowercase()   // turns all to lowercase too
+                                code.contains(tn) || name.contains(tn) || traits.contains(tn)
+                            }
+               matchColorOrType && matchSet && matchRarity && matchSearch
             }
             .toList()
     }

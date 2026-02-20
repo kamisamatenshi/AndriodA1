@@ -129,6 +129,11 @@ dependencies {
 
     implementation("androidx.compose.material:material-icons-extended")
 
+    // auto translate
+    implementation("com.google.mlkit:translate:17.0.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+    implementation("com.google.code.gson:gson:2.10.1")
+
 }
 
 configurations.configureEach {
