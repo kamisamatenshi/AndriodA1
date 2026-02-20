@@ -151,7 +151,7 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
                                 val tn = t.lowercase()   // turns all to lowercase too
                                 code.contains(tn) || name.contains(tn) || traits.contains(tn)
                             }
-               matchColorOrType && matchSet && matchRarity && matchSearch
+                matchColor && matchCardType && matchSet && matchRarity && matchSearch
             }
             .toList()
     }
