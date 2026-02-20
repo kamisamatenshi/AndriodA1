@@ -5,8 +5,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.koi.thepiece.AppGraph
 import com.koi.thepiece.data.model.Card
+import com.koi.thepiece.ui.screens.CardEntry
+import com.koi.thepiece.ui.screens.CardVariant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
@@ -173,6 +176,43 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
             ?.first
             ?: "all"
     }
+
+
+
+    //For OnePieceCardScan
+    private val _detectedCards = MutableStateFlow<LinkedHashMap<String, CardEntry>>(linkedMapOf())
+    val detectedCards: StateFlow<LinkedHashMap<String, CardEntry>> = _detectedCards.asStateFlow()
+
+    fun updateDetectedCards(cards: LinkedHashMap<String, CardEntry>) {
+        _detectedCards.value = cards
+    }
+
+    fun clearDetectedCards() {
+        _detectedCards.value = linkedMapOf()
+    }
+
+    fun saveDetectedCards(
+        entries: List<CardEntry>,
+        allCards: List<Card>
+    ) {
+        viewModelScope.launch {
+            entries
+                .filter { it.variant != CardVariant.UNKNOWN }
+                .forEach { entry ->
+                    val cardId = entry.selectedCardId
+                        ?: allCards.find { card ->
+                            card.code.equals(entry.code, ignoreCase = true) &&
+                                    CardVariant.fromRarity(card.rarity) == entry.variant
+                        }?.id
+                        ?: return@forEach
+
+                    val current = allCards.find { it.id == cardId }?.ownedQty ?: 0
+                    repo.updateOwnedQty(cardId, current + entry.quantity)
+                }
+            clearDetectedCards()
+        }
+    }
+
 
     private val RARITY_OPTIONS = listOf(
         "all" to "All",
