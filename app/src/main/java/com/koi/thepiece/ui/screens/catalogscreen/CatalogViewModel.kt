@@ -23,6 +23,9 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(CatalogUiState())
     val state: StateFlow<CatalogUiState> = _state
 
+    private val _prices = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val prices: StateFlow<Map<String, Int>> = _prices
+
     init {
         // Observe local DB (offline cache)
         viewModelScope.launch {
@@ -46,6 +49,7 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
             }
             _state.update { it.copy(loading = false) }
         }
+
     }
 
 
@@ -177,7 +181,25 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
             ?: "all"
     }
 
+    fun fetchPrice(cardUrl: String?) {
+        if (cardUrl.isNullOrBlank()) return
+        if (_prices.value.containsKey(cardUrl)) return // avoid refetch spam
 
+        viewModelScope.launch {
+            val price = repo.GetPrice(cardUrl).getOrNull() ?: return@launch
+            _prices.update { it + (cardUrl to price) }
+        }
+    }
+
+    fun fetchPrice2(cardUrl: String?) {
+        if (cardUrl.isNullOrBlank()) return
+        if (_prices.value.containsKey(cardUrl)) return // avoid refetch spam
+
+        viewModelScope.launch {
+            val price = repo.getPrice2(cardUrl).getOrNull() ?: return@launch
+            _prices.update { it + (cardUrl to price) }
+        }
+    }
 
     //For OnePieceCardScan
     private val _detectedCards = MutableStateFlow<LinkedHashMap<String, CardEntry>>(linkedMapOf())
@@ -212,6 +234,7 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
             clearDetectedCards()
         }
     }
+
 
 
     private val RARITY_OPTIONS = listOf(

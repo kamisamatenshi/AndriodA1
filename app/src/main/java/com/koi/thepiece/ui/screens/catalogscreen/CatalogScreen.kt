@@ -155,7 +155,8 @@ fun CatalogScreen(
                                 imageLoader = imageLoader,
                                 onClick = { vm.openCard(card) },
                                 onPlus = { vm.incrementQty(card) },
-                                onMinus = { vm.decrementQty(card) }
+                                onMinus = { vm.decrementQty(card) },
+                                vm
                             )
                         }
                     }
