@@ -66,6 +66,8 @@ dependencies {
     implementation(libs.androidx.viewfinder.compose)
     implementation(libs.androidx.compose.runtime.saveable)
     implementation(libs.androidx.compose.foundation.layout)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.ui.graphics)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -87,6 +89,9 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.3.4")
     implementation("androidx.camera:camera-lifecycle:1.3.4")
     implementation("androidx.camera:camera-view:1.3.4")
+
+    // ML Kit
+    implementation("com.google.mlkit:text-recognition:16.0.0")
 
     // TFLite + support
     implementation("org.tensorflow:tensorflow-lite:2.13.0")
@@ -128,6 +133,11 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
     implementation("androidx.compose.material:material-icons-extended")
+
+    // auto translate
+    implementation("com.google.mlkit:translate:17.0.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+    implementation("com.google.code.gson:gson:2.10.1")
 
 }
 

@@ -35,5 +35,7 @@ data class CardDto(
     val skillJp: String?,
 
     @Json(name = "skill_en")
-    val skillEn: String?
+    val skillEn: String?,
+
+    val price: Int?
 )

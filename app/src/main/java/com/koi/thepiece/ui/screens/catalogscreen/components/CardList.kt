@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,27 +50,39 @@ fun CardTileList(
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(card.imageUrl)
-                .diskCachePolicy(CachePolicy.ENABLED)
-                .memoryCachePolicy(CachePolicy.ENABLED)
-                .crossfade(true)
-                .scale(Scale.FIT)
-                .build(),
-            imageLoader = imageLoader,
-            contentDescription = card.code ?: "Card",
+        Box(
             modifier = Modifier
                 .width(56.dp)
                 .aspectRatio(0.72f)
-                .clip(RoundedCornerShape(8.dp))
-        )
+        ) {
+
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(card.imageUrl)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .crossfade(true)
+                    .scale(Scale.FIT)
+                    .build(),
+                imageLoader = imageLoader,
+                contentDescription = card.code ?: "Card",
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(RoundedCornerShape(8.dp))
+            )
+
+            QtyBadge(
+                qty = card.ownedQty,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+
+            )
+        }
 
         Spacer(Modifier.width(10.dp))
 
         Column(Modifier.weight(1f)) {
-            Text(card.code ?: "-", style = MaterialTheme.typography.titleSmall)
-            Text("Owned: ${card.ownedQty}", style = MaterialTheme.typography.bodySmall)
+            Text(card.name?: "-", style = MaterialTheme.typography.titleSmall)
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

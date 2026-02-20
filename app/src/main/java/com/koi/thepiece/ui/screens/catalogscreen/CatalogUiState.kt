@@ -9,17 +9,24 @@ data class CatalogUiState(
     val allCards: List<Card> = emptyList(),
 
     // filters
-    val colorOrType: String = "all",
+    val color: String = "all",
+    val cardType: String = "all",
     val setFilter: String = "all",
     val rarityFilter: String = "all",
 
     // search
     val searchQuery: String = "",
 
+    // search translate
+    val searchQueryJa: String = "",
+
     // paging
-    val pageSize: Int = 30,
+    val pageSize: Int = 20,
     val page: Int = 1,
 
     // modal
-    val selected: Card? = null
+    val selected: Card? = null,
+    val selectedID: Int? = null,
+
+    val price: Int =0
 )

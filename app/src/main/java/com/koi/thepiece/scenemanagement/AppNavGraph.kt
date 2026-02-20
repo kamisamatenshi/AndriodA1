@@ -1,6 +1,7 @@
 package com.koi.thepiece.scenemanagement
 
 import android.app.Application
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
@@ -12,6 +13,7 @@ import coil.ImageLoader
 import com.koi.thepiece.audio.AudioManager
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckBuilderLeaderScreen
 import com.koi.thepiece.ui.screens.MenuScreen
+import com.koi.thepiece.ui.screens.OnePieceCardScan
 import com.koi.thepiece.ui.screens.Scan
 import com.koi.thepiece.ui.screens.SettingsScreen
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogScreen
@@ -19,6 +21,10 @@ import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckBuilderLeaderDeckScreen
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckListScreen
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModel
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModelFactory
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
+import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModelFactory
 
 @Composable
 fun AppNavGraph(
@@ -45,7 +51,7 @@ fun AppNavGraph(
                         onToggleTheme = onToggleTheme,
                         onGoDeckList = { backStack.add(Route.DeckList) },
                         onGoCatalog = { backStack.add(Route.Catalog) },
-                        onGoScanner = { backStack.add(Route.Scan) },
+                        onGoScanner = { backStack.add(Route.OCRScan) },
                         onGoSettings = { backStack.add(Route.Settings) },
                     )
                 }
@@ -71,6 +77,22 @@ fun AppNavGraph(
                         }
                     )
                 }
+
+                Route.OCRScan -> NavEntry(key) {
+                    val app = LocalContext.current.applicationContext as Application
+                    val scanViewModel: CatalogViewModel = viewModel(factory = CatalogViewModelFactory(app))
+                    OnePieceCardScan(
+                        audioManager = audioManager,
+                        imageLoader = imageLoader,
+                        viewModel = scanViewModel,
+                        onBack = { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) },
+                        onCodeDetected = { code ->
+                            Log.d("OCRScanRoute", "Card code detected: $code")
+                            // Optional: navigate to detail screen
+                        }
+                    )
+                }
+
 
                 Route.Settings -> NavEntry(key) {
                     SettingsScreen(
