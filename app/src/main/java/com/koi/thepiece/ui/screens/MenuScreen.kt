@@ -134,7 +134,7 @@ fun MenuScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Scan One Piece Card (OCR)")
+                    Text("Go to Scanner")
                 }
             }
 
