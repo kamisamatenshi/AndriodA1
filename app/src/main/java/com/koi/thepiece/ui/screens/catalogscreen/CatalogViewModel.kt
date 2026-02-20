@@ -6,8 +6,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.koi.thepiece.AppGraph
 import com.koi.thepiece.data.model.Card
+import com.koi.thepiece.ui.screens.CardEntry
+import com.koi.thepiece.ui.screens.CardVariant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
@@ -20,6 +23,9 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow(CatalogUiState())
     val state: StateFlow<CatalogUiState> = _state
+
+    private val _prices = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val prices: StateFlow<Map<String, Int>> = _prices
 
     init {
         // Observe local DB (offline cache)
@@ -44,15 +50,21 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
             }
             _state.update { it.copy(loading = false) }
         }
+
     }
 
 
 
 
     // -------- Filters / Search --------
-    fun setColorOrType(value: String) {
-        _state.update { it.copy(colorOrType = value, page = 1) }
+    fun setColor(value: String) {
+        _state.update { it.copy(color = value, page = 1) }
     }
+
+    fun setCardType(value: String) {
+        _state.update { it.copy(cardType = value, page = 1) }
+    }
+
 
     fun setSetFilter(value: String) {
         _state.update { it.copy(setFilter = value, page = 1) }
@@ -70,11 +82,15 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
 
     // -------- Modal --------
     fun openCard(card: Card) {
-        _state.update { it.copy(selected = card) }
+        _state.update { it.copy(selected = card)
+                        it.copy(selectedID = card.id)
+        }
     }
 
     fun closeModal() {
-        _state.update { it.copy(selected = null) }
+        _state.update { it.copy(selected = null)
+                        it.copy(selectedID = null)
+        }
     }
 
     // -------- Qty updates --------
@@ -107,10 +123,13 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
 
         return s.allCards.asSequence()
             .filter { c ->
-                val matchColorOrType =
-                    s.colorOrType == "all" ||
-                            c.color.equals(s.colorOrType, ignoreCase = true) ||
-                            c.type.equals(s.colorOrType, ignoreCase = true)
+                val matchColor =
+                    s.color == "all" ||
+                            c.color.equals(s.color, ignoreCase = true)
+
+                val matchCardType =
+                    s.cardType =="all" ||
+                            c.type.equals(s.cardType, ignoreCase = true)
 
                 val matchSet =
                     s.setFilter == "all" ||
@@ -132,7 +151,7 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
                                 val tn = t.lowercase()   // turns all to lowercase too
                                 code.contains(tn) || name.contains(tn) || traits.contains(tn)
                             }
-                matchColorOrType && matchSet && matchRarity && matchSearch
+                matchColor && matchCardType && matchSet && matchRarity && matchSearch
             }
             .toList()
     }
@@ -175,6 +194,62 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
             ?.first
             ?: "all"
     }
+
+    fun fetchPrice(cardUrl: String?) {
+        if (cardUrl.isNullOrBlank()) return
+        if (_prices.value.containsKey(cardUrl)) return // avoid refetch spam
+
+        viewModelScope.launch {
+            val price = repo.GetPrice(cardUrl).getOrNull() ?: return@launch
+            _prices.update { it + (cardUrl to price) }
+        }
+    }
+
+    fun fetchPrice2(cardUrl: String?) {
+        if (cardUrl.isNullOrBlank()) return
+        if (_prices.value.containsKey(cardUrl)) return // avoid refetch spam
+
+        viewModelScope.launch {
+            val price = repo.getPrice2(cardUrl).getOrNull() ?: return@launch
+            _prices.update { it + (cardUrl to price) }
+        }
+    }
+
+    //For OnePieceCardScan
+    private val _detectedCards = MutableStateFlow<LinkedHashMap<String, CardEntry>>(linkedMapOf())
+    val detectedCards: StateFlow<LinkedHashMap<String, CardEntry>> = _detectedCards.asStateFlow()
+
+    fun updateDetectedCards(cards: LinkedHashMap<String, CardEntry>) {
+        _detectedCards.value = cards
+    }
+
+    fun clearDetectedCards() {
+        _detectedCards.value = linkedMapOf()
+    }
+
+    fun saveDetectedCards(
+        entries: List<CardEntry>,
+        allCards: List<Card>
+    ) {
+        viewModelScope.launch {
+            entries
+                .filter { it.variant != CardVariant.UNKNOWN }
+                .forEach { entry ->
+                    val cardId = entry.selectedCardId
+                        ?: allCards.find { card ->
+                            card.code.equals(entry.code, ignoreCase = true) &&
+                                    CardVariant.fromRarity(card.rarity) == entry.variant
+                        }?.id
+                        ?: return@forEach
+
+                    val current = allCards.find { it.id == cardId }?.ownedQty ?: 0
+                    repo.updateOwnedQty(cardId, current + entry.quantity)
+                }
+            clearDetectedCards()
+        }
+    }
+
+
 
     private val RARITY_OPTIONS = listOf(
         "all" to "All",

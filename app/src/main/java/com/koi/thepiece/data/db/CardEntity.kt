@@ -34,6 +34,6 @@ data class CardEntity(
     val cost: String?,
     val skillJp: String?,
     val skillEn: String?,
-
+    val price:Int?,
     val updatedAtEpochMs: Long
 )

@@ -1,6 +1,7 @@
 package com.koi.thepiece.ui.screens.catalogscreen
 
 import android.app.Application
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -52,25 +53,28 @@ fun CatalogScreen(
     var viewMode by rememberSaveable { mutableStateOf(CatalogViewMode.GRID) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
 
-    val cards = remember(s.allCards, s.colorOrType, s.setFilter, s.rarityFilter, s.searchQuery, s.page, s.pageSize) {
+    val cards = remember(s.allCards, s.color , s.cardType , s.setFilter, s.rarityFilter, s.searchQuery, s.page, s.pageSize) {
         vm.pagedCards(s)
     }
-    val totalPages = remember(s.allCards, s.colorOrType, s.setFilter, s.rarityFilter, s.searchQuery, s.pageSize) {
+    val totalPages = remember(s.allCards, s.color, s.cardType, s.setFilter, s.rarityFilter, s.searchQuery, s.pageSize) {
         vm.totalPages(s)
     }
 
     if (showFilters) {
         FilterBottomSheet(
             currentSet = s.setFilter,
-            currentColorOrType = s.colorOrType,
+            currentColor = s.color,
             currentRarity = s.rarityFilter,
+            currentType = s.cardType,
             onSetChange = vm::setSetFilter,
-            onColorOrTypeChange = vm::setColorOrType,
+            onColorChange = vm::setColor,
+            onCardTypeChange = vm::setCardType,
             onRarityChange = vm::setRarityFilter,
             onClear = {
-                vm.setSetFilter("OP01")
-                vm.setColorOrType("all")
+                vm.setSetFilter("all")
+                vm.setColor("all")
                 vm.setRarityFilter("all")
+                vm.setCardType("all")
             },
             onDismiss = { showFilters = false }
         )
@@ -152,7 +156,8 @@ fun CatalogScreen(
                                 imageLoader = imageLoader,
                                 onClick = { vm.openCard(card) },
                                 onPlus = { vm.incrementQty(card) },
-                                onMinus = { vm.decrementQty(card) }
+                                onMinus = { vm.decrementQty(card) },
+                                vm
                             )
                         }
                     }
@@ -179,13 +184,15 @@ fun CatalogScreen(
             }
         }
 
-        if (s.selected != null) {
+        val selectedCard = s.allCards.find { it.id == s.selectedID }
+        if (selectedCard != null) {
             CardPreviewDialog(
-                card = s.selected!!,
+                card = selectedCard,
                 imageLoader = imageLoader,
                 onDismiss = vm::closeModal,
-                onPlus = { vm.incrementQty(s.selected!!) },
-                onMinus = { vm.decrementQty(s.selected!!) }
+                onPlus = { vm.incrementQty(selectedCard) },
+                onMinus = { vm.decrementQty(selectedCard) },
+                vm
             )
         }
     }

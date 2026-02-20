@@ -18,7 +18,8 @@ fun CardEntity.toDomain(): Card = Card(
     traits = traits,
     cost = cost,
     skillJp = skillJp,
-    skillEn = skillEn
+    skillEn = skillEn,
+    price = price
 )
 
 fun CardDto.toEntity(now: Long): CardEntity? {
@@ -44,6 +45,7 @@ fun CardDto.toEntity(now: Long): CardEntity? {
         cost = cost,
         skillJp = skillJp,
         skillEn = skillEn,
+        price = price,
         updatedAtEpochMs = now
     )
 }
