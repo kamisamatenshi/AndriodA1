@@ -15,11 +15,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
@@ -55,15 +58,6 @@ import java.util.concurrent.TimeUnit
 
 // ─── Data types ──────────────────────────────────────────────────────────────
 
-/**
- * Each entry in the enum corresponds to a single rarity tier that exists in the card database.
- * [rarityKey] matches the lowercase rarity string stored on [Card.rarity].
- * [label] is the human-readable string shown in the UI badge and picker dialog.
- *
- * UNKNOWN is a sentinel value used immediately after a card is scanned. It shows "—" in the
- * badge so the user knows they still need to assign a real rarity. It intentionally has no
- * rarityKey so it can never accidentally match database data or stack with a real variant row.
- */
 enum class CardVariant(val rarityKey: String, val label: String) {
     UNKNOWN("", "—"),
     A_SEC("p-sec", "A-SEC"),
@@ -79,8 +73,6 @@ enum class CardVariant(val rarityKey: String, val label: String) {
     C("c",         "C");
 
     companion object {
-        /** Returns the [CardVariant] whose [rarityKey] matches [rarity] (case-insensitive),
-         *  or null if the rarity is blank, null, or doesn't match any known variant. */
         fun fromRarity(rarity: String?): CardVariant? {
             val key = rarity?.lowercase() ?: return null
             return entries.firstOrNull { it != UNKNOWN && it.rarityKey == key }
@@ -88,14 +80,6 @@ enum class CardVariant(val rarityKey: String, val label: String) {
     }
 }
 
-/**
- * Represents a single row in the scanned-card list.
- * [code] is the base card code (e.g. "OP08-006").
- * [quantity] is how many copies are in this row.
- * [variant] is the selected rarity tier; defaults to UNKNOWN until the user picks one.
- * [selectedCardId] pins a specific alternate-art card by its database ID; null means
- * the first art found for the variant is used.
- */
 data class CardEntry(
     val code: String,
     val quantity: Int,
@@ -103,23 +87,11 @@ data class CardEntry(
     val selectedCardId: Int? = null
 )
 
-/**
- * Builds the map key used to uniquely identify a [CardEntry].
- * Combining code + variant + optional card ID ensures that the same base code at different
- * rarities or different alternate arts never accidentally stack into the same row.
- */
 fun cardKey(code: String, variant: CardVariant, cardId: Int? = null) =
     "$code|${variant.name}|${cardId ?: ""}"
 
 // ─── OCR helpers ─────────────────────────────────────────────────────────────
 
-/**
- * Attempts to extract a valid One Piece TCG card code from raw OCR text.
- * The regex matches the standard format (e.g. "OP08-006") and then corrects common
- * OCR misreads: digits in the 2-char set prefix are converted to letters (0→O),
- * and letters in the numeric portions are converted to digits (O→0).
- * Returns null if no code-shaped string is found.
- */
 fun extractCardCode(rawText: String): String? {
     val codeRegex = Regex("""[A-Z][A-Z0-9][0-9O]{2}[-–][0-9O]{3}""")
     return codeRegex.find(rawText)?.value
@@ -133,12 +105,6 @@ fun extractCardCode(rawText: String): String? {
         }
 }
 
-/**
- * Crops the center horizontal strip of a camera frame to match the grey guide-box region
- * drawn on screen. The crop is 80% of the frame width and 30% of the frame height,
- * centred vertically. All coordinates are clamped to prevent out-of-bounds crashes on
- * unusual frame dimensions.
- */
 fun cropCenterStrip(bitmap: Bitmap): Bitmap {
     val cropLeft   = (bitmap.width  * 0.10f).toInt()
     val cropWidth  = (bitmap.width  * 0.80f).toInt()
@@ -151,21 +117,12 @@ fun cropCenterStrip(bitmap: Bitmap): Bitmap {
     return Bitmap.createBitmap(bitmap, safeLeft, safeTop, safeWidth, safeHeight)
 }
 
-/**
- * Upscales [src] by 2.5× before passing it to ML Kit.
- * Card codes are small text that sits below ML Kit's reliable recognition threshold at
- * native camera resolution, so upscaling significantly improves detection accuracy.
- */
 fun preprocessBitmap(src: Bitmap): Bitmap {
     val scale = 2.5f
     val matrix = Matrix().apply { postScale(scale, scale) }
     return Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
 }
 
-/**
- * Converts a CameraX [ImageProxy] (RGBA_8888 format) to a correctly oriented [Bitmap]
- * by applying the frame's reported rotation before returning.
- */
 fun ImageProxy.toBitmap(): Bitmap {
     val buffer: ByteBuffer = planes[0].buffer
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -176,11 +133,6 @@ fun ImageProxy.toBitmap(): Bitmap {
 
 // ─── Camera helpers ───────────────────────────────────────────────────────────
 
-/**
- * Starts combined autofocus (AF) and autoexposure (AE) metering locked to the centre of
- * the preview surface. [setAutoCancelDuration] causes the camera to re-evaluate focus
- * every 3 seconds, keeping the scan area sharp as cards are repositioned.
- */
 fun triggerContinuousAutofocus(cameraControl: CameraControl?, previewView: PreviewView) {
     cameraControl ?: return
     val meteringPoint = previewView.meteringPointFactory.createPoint(0.5f, 0.5f)
@@ -195,42 +147,20 @@ fun triggerContinuousAutofocus(cameraControl: CameraControl?, previewView: Previ
 
 // ─── Card list helpers ────────────────────────────────────────────────────────
 
-/**
- * Returns all [Card] objects whose code matches [code] (case-insensitive).
- * This includes every rarity and alternate art for that base code.
- */
 fun matchingCards(code: String, allCards: List<Card>): List<Card> =
     allCards.filter { it.code.equals(code, ignoreCase = true) }
 
-/**
- * Derives the list of [CardVariant]s that actually exist for a given set of [cards],
- * ordered to match the canonical RARITY_OPTIONS order defined in the enum.
- * UNKNOWN is always excluded since it is not a real database rarity.
- */
 fun availableVariantsFor(cards: List<Card>): List<CardVariant> {
     val present = cards.mapNotNull { CardVariant.fromRarity(it.rarity) }.toSet()
     return CardVariant.entries.filter { it != CardVariant.UNKNOWN && it in present }
 }
 
-/**
- * Resolves which [Card] object should be displayed for a given [entry].
- * Priority:
- *   1. If the user has pinned a specific art ([CardEntry.selectedCardId] is set), use that.
- *   2. If the variant is UNKNOWN (freshly scanned), fall back to the first available card
- *      so the thumbnail shows something rather than a grey placeholder.
- *   3. Otherwise find the first card whose rarity maps to the entry's variant.
- */
 fun resolveCardEntity(entry: CardEntry, cards: List<Card>): Card? = when {
-    entry.selectedCardId != null       -> cards.find { it.id == entry.selectedCardId }
+    entry.selectedCardId != null         -> cards.find { it.id == entry.selectedCardId }
     entry.variant == CardVariant.UNKNOWN -> cards.firstOrNull()
     else -> cards.find { CardVariant.fromRarity(it.rarity) == entry.variant }
 }
 
-/**
- * Applies a variant or alternate-art selection made in the picker dialog.
- * Removes the old map entry at [oldKey], then either merges quantity into an existing
- * entry at [newKey] or inserts a fresh one. Returns the updated map.
- */
 fun applyVariantSelection(
     detectedCards: LinkedHashMap<String, CardEntry>,
     oldKey: String,
@@ -252,11 +182,6 @@ fun applyVariantSelection(
 
 // ─── Composables ─────────────────────────────────────────────────────────────
 
-/**
- * A single card-art tile shown inside the variant picker dialog.
- * Displays the card image with an aspect-ratio-correct frame, a coloured border when
- * selected, and an "Alt N" subtitle when the variant has more than one art.
- */
 @Composable
 private fun VariantArtTile(
     card: Card,
@@ -310,11 +235,6 @@ private fun VariantArtTile(
     }
 }
 
-/**
- * A section inside the picker dialog for a single [variant].
- * Shows the rarity label as a section header, then a horizontally scrollable row of
- * [VariantArtTile]s — one per alternate art that exists for this variant.
- */
 @Composable
 private fun VariantSection(
     variant: CardVariant,
@@ -357,12 +277,6 @@ private fun VariantSection(
     }
 }
 
-/**
- * The full-screen dialog shown when the user taps the rarity badge.
- * Iterates over all [availableVariants] for the card and renders a [VariantSection]
- * for each, allowing the user to pick both a rarity tier and a specific alternate art.
- * Dismissed by tapping outside or selecting a tile.
- */
 @Composable
 private fun VariantPickerDialog(
     entry: CardEntry,
@@ -413,12 +327,6 @@ private fun VariantPickerDialog(
     }
 }
 
-/**
- * A single row in the scanned-card list.
- * Shows a thumbnail, the card code, a tappable rarity badge, a quantity counter, and
- * +/- buttons. The badge opens [VariantPickerDialog] when tapped. Decrementing quantity
- * to zero removes the row entirely.
- */
 @Composable
 private fun CardRow(
     mapKey: String,
@@ -473,7 +381,6 @@ private fun CardRow(
             modifier = Modifier.weight(1f)
         )
 
-        // Rarity badge — red/dashed when UNKNOWN to prompt the user to assign a rarity.
         Box(
             modifier = Modifier
                 .width(56.dp)
@@ -557,17 +464,98 @@ private fun CardRow(
     }
 }
 
-// ─── Screen ───────────────────────────────────────────────────────────────────
+// ─── Save confirmation dialog ─────────────────────────────────────────────────
 
 /**
- * Main scan screen. The top 40% of the screen is a live camera preview with a grey guide
- * box marking the OCR scan region. The bottom 60% is a scrollable list of scanned cards
- * with rarity assignment, quantity controls, and a Scan/Working button.
- *
- * On each camera frame, OCR is attempted while [buttonWorking] is true. When a code is
- * found the entry is added to [detectedCards] with [CardVariant.UNKNOWN] so the user must
- * manually confirm the rarity via the badge picker before it stacks with other entries.
+ * Shows a summary of what will be saved.
+ * If any entries still have UNKNOWN rarity they are listed as a warning — the user
+ * can still confirm (those entries will be skipped) or go back and fix them first.
  */
+@Composable
+private fun SaveConfirmDialog(
+    entries: List<CardEntry>,
+    colorError: androidx.compose.ui.graphics.Color,
+    colorOnSurface: androidx.compose.ui.graphics.Color,
+    colorOnSurfaceVariant: androidx.compose.ui.graphics.Color,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val unknownEntries = entries.filter { it.variant == CardVariant.UNKNOWN }
+    val saveableEntries = entries.filter { it.variant != CardVariant.UNKNOWN }
+    val hasUnknown = unknownEntries.isNotEmpty()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Save to Collection?", fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Saveable summary
+                if (saveableEntries.isNotEmpty()) {
+                    Text(
+                        "${saveableEntries.size} card${if (saveableEntries.size > 1) "s" else ""} will be added to your collection:",
+                        fontSize = 13.sp,
+                        color = colorOnSurface
+                    )
+                    saveableEntries.forEach { entry ->
+                        Text(
+                            "  • ${entry.code}  ${entry.variant.label}  ×${entry.quantity}",
+                            fontSize = 12.sp,
+                            color = colorOnSurfaceVariant
+                        )
+                    }
+                }
+
+                // Unknown warning
+                if (hasUnknown) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "⚠ The following ${unknownEntries.size} entr${if (unknownEntries.size > 1) "ies" else "y"} have no rarity assigned and will be skipped:",
+                        fontSize = 13.sp,
+                        color = colorError,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    unknownEntries.forEach { entry ->
+                        Text(
+                            "  • ${entry.code}  ×${entry.quantity}",
+                            fontSize = 12.sp,
+                            color = colorError
+                        )
+                    }
+                }
+
+                // Nothing to save at all
+                if (saveableEntries.isEmpty()) {
+                    Text(
+                        "No cards with a rarity assigned. Please assign rarities before saving.",
+                        fontSize = 13.sp,
+                        color = colorError
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = saveableEntries.isNotEmpty()
+            ) {
+                Text(
+                    "Save",
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (saveableEntries.isNotEmpty())
+                        androidx.compose.ui.graphics.Color.Unspecified
+                    else
+                        colorOnSurfaceVariant
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
 @Composable
 fun OnePieceCardScan(
     modifier: Modifier = Modifier,
@@ -590,18 +578,58 @@ fun OnePieceCardScan(
     var scanningState by remember { mutableStateOf("idle") }
     var buttonWorking by remember { mutableStateOf(false) }
     var cameraControl: CameraControl? by remember { mutableStateOf<CameraControl?>(null) }
-    var detectedCards by remember { mutableStateOf(linkedMapOf<String, CardEntry>()) }
+    val detectedCards by viewModel.detectedCards.collectAsState()
     var isProcessing by remember { mutableStateOf(false) }
+    var showResetConfirm by remember { mutableStateOf(false) }
+    var showSaveConfirm by remember { mutableStateOf(false) }
 
-    val colorBackground        = MaterialTheme.colorScheme.background
-    val colorOnSurface         = MaterialTheme.colorScheme.onSurface
-    val colorOnSurfaceVariant  = MaterialTheme.colorScheme.onSurfaceVariant
-    val colorPrimary           = MaterialTheme.colorScheme.primary
-    val colorError             = MaterialTheme.colorScheme.error
+    val colorBackground       = MaterialTheme.colorScheme.background
+    val colorOnSurface        = MaterialTheme.colorScheme.onSurface
+    val colorOnSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val colorPrimary          = MaterialTheme.colorScheme.primary
+    val colorError            = MaterialTheme.colorScheme.error
 
     DisposableEffect(Unit) { onDispose { cameraExecutor.shutdown() } }
 
-    // OCR effect — fires on every new camera frame while a scan is active.
+    // ── Reset confirmation ────────────────────────────────────────────────────
+    if (showResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            title = { Text("Reset Scanned Cards?", fontWeight = FontWeight.SemiBold) },
+            text = { Text("This will remove all scanned cards from the list.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearDetectedCards()
+                    showResetConfirm = false
+                }) {
+                    Text("Yes", color = colorError, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirm = false }) { Text("No") }
+            }
+        )
+    }
+
+    // ── Save confirmation ─────────────────────────────────────────────────────
+    if (showSaveConfirm) {
+        SaveConfirmDialog(
+            entries = detectedCards.values.toList(),
+            colorError = colorError,
+            colorOnSurface = colorOnSurface,
+            colorOnSurfaceVariant = colorOnSurfaceVariant,
+            onConfirm = {
+                showSaveConfirm = false
+                viewModel.saveDetectedCards(
+                    entries = detectedCards.values.toList(),
+                    allCards = allCards
+                )
+            },
+            onDismiss = { showSaveConfirm = false }
+        )
+    }
+
+    // ── OCR effect ────────────────────────────────────────────────────────────
     LaunchedEffect(latestFrameBitmap) {
         val bitmap = latestFrameBitmap ?: return@LaunchedEffect
         if (!buttonWorking || isProcessing || scanningState == "done") return@LaunchedEffect
@@ -614,7 +642,7 @@ fun OnePieceCardScan(
         recognizer.process(inputImage)
             .addOnSuccessListener { visionText ->
                 val code = extractCardCode(visionText.text)
-                if (code != null) {
+                if (code != null && matchingCards(code, allCards).isNotEmpty()) {
                     val updated = LinkedHashMap(detectedCards)
                     val key = cardKey(code, CardVariant.UNKNOWN)
                     val existing = updated[key]
@@ -623,7 +651,7 @@ fun OnePieceCardScan(
                     } else {
                         CardEntry(code = code, quantity = 1, variant = CardVariant.UNKNOWN)
                     }
-                    detectedCards = updated
+                    viewModel.updateDetectedCards(updated)
                     scanningState = "done"
                     buttonWorking = false
                     onCodeDetected(code)
@@ -639,7 +667,7 @@ fun OnePieceCardScan(
             }
     }
 
-    // Camera setup effect — binds preview and frame-analysis use cases once on composition.
+    // ── Camera setup ──────────────────────────────────────────────────────────
     LaunchedEffect(Unit) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
@@ -675,11 +703,12 @@ fun OnePieceCardScan(
         }, ContextCompat.getMainExecutor(context))
     }
 
+    // ── UI ────────────────────────────────────────────────────────────────────
     Box(modifier = modifier.fillMaxSize()) {
 
         Column(modifier = Modifier.fillMaxSize()) {
 
-            // Camera preview — tapping triggers a one-shot manual autofocus at screen centre.
+            // Camera preview
             Box(
                 modifier = Modifier
                     .weight(0.4f)
@@ -730,7 +759,19 @@ fun OnePieceCardScan(
                             modifier = Modifier.align(Alignment.CenterHorizontally)
                         )
                     } else {
-                        // Header
+                        // Reset button
+                        SfxButton(
+                            audio = audioManager,
+                            onClick = { showResetConfirm = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = colorError),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                        ) {
+                            Text("Reset Scanned Cards", fontWeight = FontWeight.SemiBold)
+                        }
+
+                        // Header row
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -751,7 +792,7 @@ fun OnePieceCardScan(
                                 colorOnSurfaceVariant = colorOnSurfaceVariant,
                                 colorPrimary = colorPrimary,
                                 colorError = colorError,
-                                onDetectedCardsChange = { detectedCards = it },
+                                onDetectedCardsChange = { viewModel.updateDetectedCards(it) },
                                 currentDetectedCards = detectedCards,
                                 onCodeDetected = onCodeDetected
                             )
@@ -760,9 +801,7 @@ fun OnePieceCardScan(
                 }
 
                 // Scan / Working button
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                ) {
+                Box(modifier = Modifier.fillMaxWidth()) {
                     SfxButton(
                         audio = audioManager,
                         onClick = {
@@ -783,14 +822,28 @@ fun OnePieceCardScan(
             }
         }
 
-        SfxFAB(
+        // Back button — bottom start
+        SfxButton(
             audio = audioManager,
             onClick = onBack,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(24.dp)
+                .padding(16.dp)
         ) {
-            Text("Back", fontSize = 14.sp)
+            Text("Back")
+        }
+
+        // Save button — bottom end, only shown when there are cards
+        if (detectedCards.isNotEmpty()) {
+            SfxButton(
+                audio = audioManager,
+                onClick = { showSaveConfirm = true },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp)
+            ) {
+                Text("Save", fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }

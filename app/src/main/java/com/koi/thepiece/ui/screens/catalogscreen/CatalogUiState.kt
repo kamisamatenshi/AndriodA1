@@ -9,7 +9,8 @@ data class CatalogUiState(
     val allCards: List<Card> = emptyList(),
 
     // filters
-    val colorOrType: String = "all",
+    val color: String = "all",
+    val cardType: String = "all",
     val setFilter: String = "all",
     val rarityFilter: String = "all",
 
@@ -23,4 +24,6 @@ data class CatalogUiState(
     // modal
     val selected: Card? = null,
     val selectedID: Int? = null
+
+    val price: Int =0
 )

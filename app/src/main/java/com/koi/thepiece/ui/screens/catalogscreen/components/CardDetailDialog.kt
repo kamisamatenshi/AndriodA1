@@ -31,8 +31,9 @@ import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Scale
+import com.koi.thepiece.AppGraph.provideCatalogRepository
 import com.koi.thepiece.data.model.Card
-import org.intellij.lang.annotations.JdkConstants
+import com.koi.thepiece.data.repo.CatalogRepository
 
 @Composable
 fun CardPreviewDialog(
