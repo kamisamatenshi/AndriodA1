@@ -69,11 +69,15 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
 
     // -------- Modal --------
     fun openCard(card: Card) {
-        _state.update { it.copy(selected = card) }
+        _state.update { it.copy(selected = card)
+                        it.copy(selectedID = card.id)
+        }
     }
 
     fun closeModal() {
-        _state.update { it.copy(selected = null) }
+        _state.update { it.copy(selected = null)
+                        it.copy(selectedID = null)
+        }
     }
 
     // -------- Qty updates --------

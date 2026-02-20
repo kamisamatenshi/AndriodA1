@@ -179,7 +179,17 @@ fun CatalogScreen(
             }
         }
 
-        if (s.selected != null) {
+        val selectedCard = s.allCards.find { it.id == s.selectedID }
+        if (selectedCard != null) {
+            CardPreviewDialog(
+                card = selectedCard,
+                imageLoader = imageLoader,
+                onDismiss = vm::closeModal,
+                onPlus = { vm.incrementQty(selectedCard) },
+                onMinus = { vm.decrementQty(selectedCard) }
+            )
+        }
+        /*if (s.selected != null) {
             CardPreviewDialog(
                 card = s.selected!!,
                 imageLoader = imageLoader,
@@ -187,6 +197,6 @@ fun CatalogScreen(
                 onPlus = { vm.incrementQty(s.selected!!) },
                 onMinus = { vm.decrementQty(s.selected!!) }
             )
-        }
+        }*/
     }
 }

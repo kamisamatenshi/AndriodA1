@@ -21,5 +21,6 @@ data class CatalogUiState(
     val page: Int = 1,
 
     // modal
-    val selected: Card? = null
+    val selected: Card? = null,
+    val selectedID: Int? = null
 )
