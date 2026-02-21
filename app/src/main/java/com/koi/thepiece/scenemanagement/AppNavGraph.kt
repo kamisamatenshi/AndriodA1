@@ -23,9 +23,6 @@ import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckListScreen
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModel
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModelFactory
 
-import android.app.Application
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.koi.thepiece.ui.screens.Loginscreen.LoginScreen
 
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
@@ -44,8 +41,6 @@ fun AppNavGraph(
 
     // For deck to use the shared view model for easier control
     val app = LocalContext.current.applicationContext as Application
-    val deckVm: DeckViewModel = viewModel(factory = DeckViewModelFactory(app))
-    val deckListVm: DeckListViewModel = viewModel(factory = DeckListViewModelFactory(app))
 
     NavDisplay(
         backStack = backStack,
@@ -129,6 +124,7 @@ fun AppNavGraph(
                 Route.DeckList -> NavEntry(key) {
                     val app = LocalContext.current.applicationContext as Application
                     val deckListVm: DeckListViewModel = viewModel(factory = DeckListViewModelFactory(app))
+                    val deckVm: DeckViewModel = viewModel(factory = DeckViewModelFactory(app))
 
                     DeckListScreen(
                         vm = deckListVm,
@@ -147,6 +143,7 @@ fun AppNavGraph(
                 }
 
                 Route.DeckBuilderLeader -> NavEntry(key) {
+                    val deckVm: DeckViewModel = viewModel(factory = DeckViewModelFactory(app))
                     LeaderDeckBuildScreen(
                         vm = deckVm,
                         audio = audioManager,
@@ -162,6 +159,7 @@ fun AppNavGraph(
                 }
 
                 Route.DeckBuilderLeaderDeck -> NavEntry(key) {
+                    val deckVm: DeckViewModel = viewModel(factory = DeckViewModelFactory(app))
                     DeckCardBuildScreen(
                         vm = deckVm,
                         audio = audioManager,

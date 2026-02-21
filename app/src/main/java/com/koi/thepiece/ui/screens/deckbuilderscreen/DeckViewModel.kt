@@ -47,16 +47,14 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() {
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            val result = repo.refreshCards(preloadFirstPageImages = true)
+            val result = repo.refreshCards(AppGraph.token,preloadFirstPageImages = true)
             result.exceptionOrNull()?.let { e ->
                 _state.update { it.copy(loading = false, error = e.message ?: "Failed to refresh") }
             }
             _state.update { it.copy(loading = false) }
         }
+
     }
-
-
-
 
     // -------- Filters / Search --------
     fun setLeaderPickMode(){
@@ -102,16 +100,6 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
     fun setSelectedLeader(card: Card) {
         _state.update { it.copy(selectedLeader = card) }
         recomputeLegality()
-    }
-
-
-    private fun updateQty(card: Card, newQty: Int) {
-        viewModelScope.launch {
-            val result = repo.updateOwnedQty(card.id, newQty)
-            result.exceptionOrNull()?.let { e ->
-                _state.update { it.copy(error = e.message ?: "Failed to update qty") }
-            }
-        }
     }
 
     // -------- Derived lists (filter + paging) --------
