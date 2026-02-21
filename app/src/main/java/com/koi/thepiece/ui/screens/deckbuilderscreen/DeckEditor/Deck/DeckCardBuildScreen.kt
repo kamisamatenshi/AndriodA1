@@ -284,11 +284,20 @@ fun DeckCardBuildScreen(
                         Text("Validate")
                     }
 
+                    val isEditing = (s.deckId != null)
+
                     OutlinedButton(
-                        onClick = { showSaveDialog = true },
-                        enabled = (s.selectedLeader != null && totalCards > 0)
+                        onClick = {
+                            if (isEditing) {
+                                vm.saveDeck(s.deckName)   // update in-place
+                            } else {
+                                showSaveDialog = true     // ask name once
+                                deckName = s.deckName
+                            }
+                        },
+                        enabled = (s.selectedLeader != null && s.deck.isNotEmpty())
                     ) {
-                        Text("Save")
+                        Text(if (isEditing) "Update Deck" else "Save Deck")
                     }
                 }
 

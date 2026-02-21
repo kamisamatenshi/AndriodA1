@@ -30,6 +30,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun DeckListScreen(
     vm: DeckListViewModel,
+    deckVm: DeckViewModel,
     onBack: () -> Unit,
     audio: AudioManager,
     onGoCreateNewDeck: () -> Unit,
@@ -62,7 +63,10 @@ fun DeckListScreen(
         ) {
             AnimatedVisibility(visible = showBtn1, enter = fadeSpec()) {
                 SfxButton(
-                    onClick = onGoCreateNewDeck,
+                    onClick = {
+                        deckVm.startNewDeck()
+                        onGoCreateNewDeck()
+                    },
                     audio = audio,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Create New Deck") }
@@ -81,7 +85,10 @@ fun DeckListScreen(
                         DeckRow(
                             d = d,
                             imageLoader = imageLoader,
-                            onClick = { onOpenDeck(d.deckId) }
+                            onClick = {
+                                deckVm.loadDeck(d.deckId)
+                                onOpenDeck(d.deckId)
+                            }
                         )
                     }
                 }

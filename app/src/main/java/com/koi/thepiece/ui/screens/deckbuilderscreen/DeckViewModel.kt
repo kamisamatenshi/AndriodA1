@@ -316,49 +316,65 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
     fun saveDeck(name: String) {
         val s = _state.value
         val leader = s.selectedLeader ?: return
+        val cleanName = name.trim()
 
         viewModelScope.launch {
-            if (s.editingDeckId == null) {
+            if (s.deckId == null) {
                 // NEW deck
-                deckRepo.saveNewDeck(
-                    name = name.trim(),
+                val newId = deckRepo.saveNewDeck(
+                    name = cleanName,
                     leaderCardId = leader.id,
                     deckMap = s.deck
                 )
+                _state.update { it.copy(deckId = newId, deckName = cleanName) }
+                _saveResult.value = newId
             } else {
-                // OVERWRITE existing
+                // UPDATE existing deck
                 deckRepo.overwriteExistingDeck(
-                    deckId = s.editingDeckId,
-                    name = name.trim(),
+                    deckId = s.deckId!!,
+                    name = cleanName,
                     leaderCardId = leader.id,
                     deckMap = s.deck
                 )
+                _state.update { it.copy(deckName = cleanName) }
+                _saveResult.value = s.deckId
             }
         }
-    }
-
-    fun consumeSaveResult() {
-        _saveResult.value = null
     }
 
     fun loadDeck(deckId: Long) {
         viewModelScope.launch {
             val loaded = deckRepo.getDeck(deckId) ?: return@launch
-            val leaderId = loaded.deck.leaderCardId
 
-            // Find leader Card from allCards (already observed)
-            val leaderCard = _state.value.allCards.firstOrNull { it.id == leaderId }
+            val leaderCard = _state.value.allCards
+                .firstOrNull { it.id == loaded.deck.leaderCardId }
 
-            // Convert DeckCardEntity list -> Map<cardId, qty>
-            val deckMap: Map<Int, Int> = loaded.cards.associate { it.cardId to it.qty }
+            val deckMap = loaded.cards.associate { it.cardId to it.qty }
 
             _state.update {
                 it.copy(
+                    deckId = loaded.deck.deckId,
+                    deckName = loaded.deck.name,
                     selectedLeader = leaderCard,
-                    deck = deckMap,
-                    editingDeckId = deckId
+                    deck = deckMap
                 )
             }
+            recomputeLegality()
+        }
+    }
+
+    fun startNewDeck() {
+        _state.update {
+            it.copy(
+                editingDeckId = null,
+                deckId = null,
+                deckName = "",
+                selectedLeader = null,
+                deck = emptyMap(),
+                legality = null,
+                page = 1,
+                searchQuery = ""
+            )
         }
     }
 

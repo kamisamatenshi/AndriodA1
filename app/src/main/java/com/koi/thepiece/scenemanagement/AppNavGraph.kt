@@ -112,6 +112,7 @@ fun AppNavGraph(
 
                     DeckListScreen(
                         vm = deckListVm,
+                        deckVm = deckVm,
                         audio = audioManager,
                         imageLoader = imageLoader,
                         onBack = {
