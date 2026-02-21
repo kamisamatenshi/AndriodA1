@@ -1,5 +1,6 @@
 package com.koi.thepiece.ui.screens.Loginscreen
 
+import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
@@ -49,6 +50,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.platform.LocalContext
 
 enum class AuthPanel { BUTTONS, LOGIN, REGISTER }
 
@@ -59,7 +61,8 @@ fun LoginScreen(
     onToggleTheme: () -> Unit,
     onGoToMainmenu: () -> Unit
 ) {
-    val viewModel: LoginViewModel = viewModel(factory = LoginViewModelFactory())
+    val context = LocalContext.current
+    val viewModel: LoginViewModel = viewModel(factory = LoginViewModelFactory(context))
 
     var isMuted by remember { mutableStateOf(audioManager.isMuted()) }
     var showImage by remember { mutableStateOf(false) }
@@ -109,7 +112,6 @@ fun LoginScreen(
 
             Spacer(Modifier.height(18.dp))
 
-            // ✅ Auth section is INSIDE the layout now
             AnimatedContent(
                 targetState = panel,
                 transitionSpec = {
@@ -136,8 +138,7 @@ fun LoginScreen(
                                 }
                                 is LoginUiState.NeedAuth -> {
                                     Text(
-                                        text = if (state.reason == "expired") "Session expired. Please login."
-                                        else "Please login to continue.",
+                                        text = state.reason ?: "Please login to continue.",
                                         color = MaterialTheme.colorScheme.error
                                     )
                                     Spacer(Modifier.height(12.dp))

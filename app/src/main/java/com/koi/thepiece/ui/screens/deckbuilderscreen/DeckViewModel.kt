@@ -6,18 +6,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.koi.thepiece.AppGraph
+import com.koi.thepiece.data.local.TokenStore
 import com.koi.thepiece.data.model.Card
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogSearchQueryExpander
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 
-class DeckViewModel(app: Application) : AndroidViewModel(app) {
+class DeckViewModel(app: Application, private val tokenStore: TokenStore) : AndroidViewModel(app) {
 
     enum class DeckEditorMode { Leader, Card }
 
@@ -47,7 +49,8 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() {
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            val result = repo.refreshCards(AppGraph.token,preloadFirstPageImages = true)
+            val token =tokenStore.tokenFlow.firstOrNull()?.trim().orEmpty()
+            val result = repo.refreshCards(token,preloadFirstPageImages = true)
             result.exceptionOrNull()?.let { e ->
                 _state.update { it.copy(loading = false, error = e.message ?: "Failed to refresh") }
             }

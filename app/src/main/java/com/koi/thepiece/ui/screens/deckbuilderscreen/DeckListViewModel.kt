@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.koi.thepiece.AppGraph
+import com.koi.thepiece.data.local.TokenStore
 import com.koi.thepiece.data.model.Card
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -18,7 +19,7 @@ data class DeckListItemUi(
     val updatedAtEpochMs: Long
 )
 
-class DeckListViewModel(app: Application) : AndroidViewModel(app) {
+class DeckListViewModel(app: Application ,private val tokenStore: TokenStore ) : AndroidViewModel(app) {
 
     private val deckRepo = AppGraph.provideDeckRepository(app)
     private val catalogRepo = AppGraph.provideCatalogRepository(app)

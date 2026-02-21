@@ -96,7 +96,8 @@ fun AppNavGraph(
 
                 Route.OCRScan -> NavEntry(key) {
                     val app = LocalContext.current.applicationContext as Application
-                    val scanViewModel: CatalogViewModel = viewModel(factory = CatalogViewModelFactory(app))
+                    val context = LocalContext.current
+                    val scanViewModel: CatalogViewModel = viewModel(factory = CatalogViewModelFactory(app,context))
                     OnePieceCardScan(
                         audioManager = audioManager,
                         imageLoader = imageLoader,
@@ -123,8 +124,9 @@ fun AppNavGraph(
 
                 Route.DeckList -> NavEntry(key) {
                     val app = LocalContext.current.applicationContext as Application
-                    val deckListVm: DeckListViewModel = viewModel(factory = DeckListViewModelFactory(app))
-                    val deckVm: DeckViewModel = viewModel(factory = DeckViewModelFactory(app))
+                    val context = LocalContext.current
+                    val deckListVm: DeckListViewModel = viewModel(factory = DeckListViewModelFactory(app,context))
+                    val deckVm: DeckViewModel = viewModel(factory = DeckViewModelFactory(app,context))
 
                     DeckListScreen(
                         vm = deckListVm,
@@ -143,7 +145,8 @@ fun AppNavGraph(
                 }
 
                 Route.DeckBuilderLeader -> NavEntry(key) {
-                    val deckVm: DeckViewModel = viewModel(factory = DeckViewModelFactory(app))
+                    val context = LocalContext.current
+                    val deckVm: DeckViewModel = viewModel(factory = DeckViewModelFactory(app,context))
                     LeaderDeckBuildScreen(
                         vm = deckVm,
                         audio = audioManager,
@@ -159,7 +162,8 @@ fun AppNavGraph(
                 }
 
                 Route.DeckBuilderLeaderDeck -> NavEntry(key) {
-                    val deckVm: DeckViewModel = viewModel(factory = DeckViewModelFactory(app))
+                    val context = LocalContext.current
+                    val deckVm: DeckViewModel = viewModel(factory = DeckViewModelFactory(app,context))
                     DeckCardBuildScreen(
                         vm = deckVm,
                         audio = audioManager,
