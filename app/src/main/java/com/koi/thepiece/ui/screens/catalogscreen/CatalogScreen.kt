@@ -127,10 +127,6 @@ fun CatalogScreen(
                 error = s.error
             )
 
-//            SearchBarRow(
-//                query = s.searchQuery,
-//                onQueryChange = vm::setSearchQuery
-//            )
             // Collect suggestions from ViewModel
             val suggestions by vm.suggestions.collectAsState()
 

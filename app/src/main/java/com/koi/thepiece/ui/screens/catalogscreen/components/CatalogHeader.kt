@@ -55,20 +55,6 @@ fun CatalogHeaderBlock(
 }
 
 @Composable
-//fun SearchBarRow(
-//    query: String,
-//    onQueryChange: (String) -> Unit
-//) {
-//    OutlinedTextField(
-//        value = query,
-//        onValueChange = onQueryChange,
-//        singleLine = true,
-//        placeholder = { Text("Search (code / name / traits)") },
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .padding(horizontal = 12.dp, vertical = 8.dp)
-//    )
-//}
 fun SearchBarRow(
     query: String,                       // Current text inside search field
     suggestions: List<String>,           // Suggested results
