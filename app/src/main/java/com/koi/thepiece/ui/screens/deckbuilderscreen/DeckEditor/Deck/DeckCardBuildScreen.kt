@@ -177,7 +177,9 @@ fun DeckCardBuildScreen(
 
                 SearchBarRow(
                     query = s.searchQuery,
-                    onQueryChange = vm::setSearchQuery
+                    suggestions = emptyList(),
+                    onQueryChange = vm::setSearchQuery,
+                    onSuggestionClick = { }
                 )
 
                 PagingRow(
