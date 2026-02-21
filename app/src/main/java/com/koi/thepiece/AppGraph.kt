@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.koi.thepiece.data.api.NetworkModule
 import com.koi.thepiece.data.db.AppDatabase
+import com.koi.thepiece.data.repo.AuthRepository
 import com.koi.thepiece.data.repo.CatalogRepository
 import com.koi.thepiece.data.repo.DeckRepository
 
@@ -12,6 +13,7 @@ object AppGraph {
     @Volatile private var catalogRepo: CatalogRepository? = null
     @Volatile private var deckRepo: DeckRepository? = null
 
+    @Volatile private var authRepo: AuthRepository? = null
     fun provideDb(context: Context): AppDatabase {
         return db ?: synchronized(this) {
             db ?: Room.databaseBuilder(
@@ -32,6 +34,7 @@ object AppGraph {
         }
     }
 
+
     fun provideDeckRepository(context: Context): DeckRepository {
         return deckRepo ?: synchronized(this) {
             deckRepo ?: DeckRepository(
@@ -39,4 +42,15 @@ object AppGraph {
             ).also { deckRepo = it }
         }
     }
+
+    fun provideAuthRepository(): AuthRepository{
+        return authRepo?:synchronized(this) {
+            authRepo ?: AuthRepository(
+                api = NetworkModule.authApi
+            ).also { authRepo = it }
+        }
+    }
+
+
+    var token = ""
 }
