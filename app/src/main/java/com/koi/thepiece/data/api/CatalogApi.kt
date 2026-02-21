@@ -9,6 +9,7 @@ import retrofit2.http.POST
 import retrofit2.http.Query
 
 data class UpdateQtyBody(
+    @Json(name = "token") val token: String,
     @Json(name = "id") val id: Int,
     @Json(name = "owned_qty") val ownedQty: Int
 )
@@ -26,12 +27,17 @@ data class PriceDto(
     val error: String? = null
 )
 
+data class CardsResponseDto(
+    val success: Boolean,
+    val cards: List<CardDto>,
+    val error: String? = null
+)
 
 interface CatalogApi {
-    @GET("api/cards.php")
-    suspend fun getCards(): List<CardDto>
+    @GET("api/get_cards.php")
+    suspend fun getCards(@Query("token") token: String): CardsResponseDto
 
-    @POST("api/update_card.php")
+    @POST("api/update_qty.php")
     suspend fun updateQty(@Body body: UpdateQtyBody): ApiResultDto
 
     @POST("api/get_price.php")

@@ -29,4 +29,6 @@ object AppGraph {
             ).also { catalogRepo = it }
         }
     }
+
+    var token = "test_token_1234567890abcdef"
 }
