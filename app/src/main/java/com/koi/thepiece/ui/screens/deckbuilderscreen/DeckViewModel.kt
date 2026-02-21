@@ -1,10 +1,14 @@
 package com.koi.thepiece.ui.screens.deckbuilderscreen
 
 import android.app.Application
+import android.util.Log
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.koi.thepiece.AppGraph
 import com.koi.thepiece.data.model.Card
+import com.koi.thepiece.ui.screens.catalogscreen.CatalogSearchQueryExpander
+import com.koi.thepiece.ui.screens.catalogscreen.CatalogUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -15,12 +19,16 @@ import kotlin.math.min
 
 class DeckViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val repo = AppGraph.provideCatalogRepository(app)
+    enum class DeckEditorMode { Leader, Card }
 
+    private val repo = AppGraph.provideCatalogRepository(app)
+    private val deckRepo = AppGraph.provideDeckRepository(app)
     private val _state = MutableStateFlow(DeckUiState())
     val state: StateFlow<DeckUiState> = _state
 
-    val selectedLeader: Card? = null
+    private val _saveResult = MutableStateFlow<Long?>(null)
+    val saveResult: StateFlow<Long?> = _saveResult
+    var mode = DeckEditorMode.Leader
 
     init {
         // Observe local DB (offline cache)
@@ -51,9 +59,22 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
 
 
     // -------- Filters / Search --------
-    fun setColorOrType(value: String) {
-        _state.update { it.copy(colorOrType = value, page = 1) }
+    fun setLeaderPickMode(){
+        mode = DeckEditorMode.Leader
     }
+
+    fun setCardPickMode(){
+        mode = DeckEditorMode.Card
+    }
+
+    fun setColor(value: String) {
+        _state.update { it.copy(color = value, page = 1) }
+    }
+
+    fun setCardType(value: String) {
+        _state.update { it.copy(cardType = value, page = 1) }
+    }
+
 
     fun setSetFilter(value: String) {
         _state.update { it.copy(setFilter = value, page = 1) }
@@ -80,15 +101,7 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSelectedLeader(card: Card) {
         _state.update { it.copy(selectedLeader = card) }
-    }
-
-    // -------- Qty updates --------
-    fun incrementQty(card: Card) {
-        updateQty(card, card.ownedQty + 1)
-    }
-
-    fun decrementQty(card: Card) {
-        updateQty(card, max(0, card.ownedQty - 1))
+        recomputeLegality()
     }
 
 
@@ -103,40 +116,95 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
 
     // -------- Derived lists (filter + paging) --------
     fun filteredCards(s: DeckUiState): List<Card> {
-        val q = s.searchQuery.trim().lowercase()
+        // It normalizes the user input ->
+        // Then It checks your NAME_MAP ->
+        // Then It checks your TRAITS_MAP ->
+        // Then It returns a Set<String> of possible matches
+        val searchTokens = CatalogSearchQueryExpander.expand(s.searchQuery)
 
-        return s.allCards.asSequence()
-            .filter { c ->
-                val matchColorOrType =
-                    s.colorOrType == "all" ||
-                            c.color.equals(s.colorOrType, ignoreCase = true) ||
-                            c.type.equals(s.colorOrType, ignoreCase = true)
+        when (mode) {
+            DeckEditorMode.Leader -> {
+                Log.d("Deck", "Deck Leader Mode")
+                return s.allCards.asSequence()
+                    .filter { c ->
+                        val matchColor =
+                            s.color == "all" ||
+                                    c.color.equals(s.color, ignoreCase = true)
 
-                val matchSet =
-                    s.setFilter == "all" ||
-                            (c.cardSet ?: "").equals(s.setFilter, ignoreCase = true)
+                        val matchCardType = c.type.equals(s.cardType, ignoreCase = true)
 
-                val selectedRarity = s.rarityFilter.trim().lowercase()
-                val cardRarity = (c.rarity ?: "").trim().lowercase()
+                        val matchSet =
+                            s.setFilter == "all" ||
+                                    (c.cardSet ?: "").equals(s.setFilter, ignoreCase = true)
 
-                val matchRarity =
-                    selectedRarity == "all" ||cardRarity== getRareKey( selectedRarity)
+                        val selectedRarity = s.rarityFilter.trim().lowercase()
+                        val cardRarity = (c.rarity ?: "").trim().lowercase()
+                        val matchRarity =
+                            selectedRarity == "all" || cardRarity == getRareKey(selectedRarity)
 
-                val matchSearch =
-                    q.isEmpty() ||
-                            (c.code ?: "").lowercase().contains(q) ||
-                            c.name.lowercase().contains(q) ||
-                            (c.traits ?: "").lowercase().contains(q)
+                        val code = (c.code ?: "").lowercase()
+                        val name = c.name.lowercase()
+                        val traits = (c.traits ?: "").lowercase()
 
-                matchColorOrType && matchSet && matchRarity && matchSearch
+                        val matchSearch =
+                            searchTokens.isEmpty() ||
+                                    searchTokens.any { t ->         //search using a set of possible equivalent strings.
+                                        // Search “code/name/traits” with the token.
+                                        val tn = t.lowercase()   // turns all to lowercase too
+                                        code.contains(tn) || name.contains(tn) || traits.contains(tn)
+                                    }
+                        matchColor && matchCardType && matchSet && matchRarity && matchSearch
+                    }
+                    .toList()
             }
-            .toList()
+
+            DeckEditorMode.Card -> {
+
+                Log.d("Deck", "Deck Editor Mode")
+                return s.allCards.asSequence()
+                    .filter { c ->
+                        val matchColor =
+                            s.color == "all" ||
+                                    c.color.equals(s.color, ignoreCase = true)
+
+                        val isLeader = c.type.equals("Leader", ignoreCase = true)
+                        val isDon = c.type.equals("Don", ignoreCase = true)
+
+                        val matchCardType =
+                            (s.cardType == "all" && !isLeader && !isDon) || c.type.equals(s.cardType, ignoreCase = true)
+
+                        val matchSet =
+                            s.setFilter == "all" ||
+                                    (c.cardSet ?: "").equals(s.setFilter, ignoreCase = true)
+
+                        val selectedRarity = s.rarityFilter.trim().lowercase()
+                        val cardRarity = (c.rarity ?: "").trim().lowercase()
+                        val matchRarity =
+                            selectedRarity == "all" || cardRarity == getRareKey(selectedRarity)
+
+                        val code = (c.code ?: "").lowercase()
+                        val name = c.name.lowercase()
+                        val traits = (c.traits ?: "").lowercase()
+
+                        val matchSearch =
+                            searchTokens.isEmpty() ||
+                                    searchTokens.any { t ->         //search using a set of possible equivalent strings.
+                                        // Search “code/name/traits” with the token.
+                                        val tn = t.lowercase()   // turns all to lowercase too
+                                        code.contains(tn) || name.contains(tn) || traits.contains(tn)
+                                    }
+                        matchColor && matchCardType && matchSet && matchRarity && matchSearch
+                    }
+                    .toList()
+            }
+        }
     }
 
     fun totalPages(s: DeckUiState): Int {
         val total = filteredCards(s).size
         return max(1, ceil(total / s.pageSize.toDouble()).toInt())
     }
+
 
     fun pagedCards(s: DeckUiState): List<Card> {
         val list = filteredCards(s)
@@ -190,21 +258,21 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
     // for deck list
     fun clearDeck() {
         _state.update { it.copy(deck = emptyMap<Int, Int>()) }
+        recomputeLegality()
     }
 
     fun addToDeck(card: Card) {
         _state.update { s ->
             val currentQty = s.deck[card.id] ?: 0
             val totalCards = s.deck.values.sum()
-
             if (totalCards >= 50) return@update s
             if (currentQty >= 4) return@update s
 
-            val newDeck: MutableMap<Int, Int> = s.deck.toMutableMap()
+            val newDeck = s.deck.toMutableMap()
             newDeck[card.id] = currentQty + 1
-
             s.copy(deck = newDeck)
         }
+        recomputeLegality()
     }
 
     fun removeFromDeck(card: Card) {
@@ -219,6 +287,90 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
 
             s.copy(deck = newDeck)
         }
+        recomputeLegality()
+    }
+
+    private val _prices = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val prices: StateFlow<Map<String, Int>> = _prices
+
+    fun fetchPrice(cardUrl: String?) {
+        if (cardUrl.isNullOrBlank()) return
+        if (_prices.value.containsKey(cardUrl)) return // avoid refetch spam
+
+        viewModelScope.launch {
+            val price = repo.GetPrice(cardUrl).getOrNull() ?: return@launch
+            _prices.update { it + (cardUrl to price) }
+        }
+    }
+
+    fun fetchPrice2(cardUrl: String?) {
+        if (cardUrl.isNullOrBlank()) return
+        if (_prices.value.containsKey(cardUrl)) return // avoid refetch spam
+
+        viewModelScope.launch {
+            val price = repo.getPrice2(cardUrl).getOrNull() ?: return@launch
+            _prices.update { it + (cardUrl to price) }
+        }
+    }
+
+    fun saveDeck(name: String) {
+        val s = _state.value
+        val leader = s.selectedLeader ?: return
+
+        viewModelScope.launch {
+            if (s.editingDeckId == null) {
+                // NEW deck
+                deckRepo.saveNewDeck(
+                    name = name.trim(),
+                    leaderCardId = leader.id,
+                    deckMap = s.deck
+                )
+            } else {
+                // OVERWRITE existing
+                deckRepo.overwriteExistingDeck(
+                    deckId = s.editingDeckId,
+                    name = name.trim(),
+                    leaderCardId = leader.id,
+                    deckMap = s.deck
+                )
+            }
+        }
+    }
+
+    fun consumeSaveResult() {
+        _saveResult.value = null
+    }
+
+    fun loadDeck(deckId: Long) {
+        viewModelScope.launch {
+            val loaded = deckRepo.getDeck(deckId) ?: return@launch
+            val leaderId = loaded.deck.leaderCardId
+
+            // Find leader Card from allCards (already observed)
+            val leaderCard = _state.value.allCards.firstOrNull { it.id == leaderId }
+
+            // Convert DeckCardEntity list -> Map<cardId, qty>
+            val deckMap: Map<Int, Int> = loaded.cards.associate { it.cardId to it.qty }
+
+            _state.update {
+                it.copy(
+                    selectedLeader = leaderCard,
+                    deck = deckMap,
+                    editingDeckId = deckId
+                )
+            }
+        }
+    }
+
+    private fun recomputeLegality() {
+        val s = _state.value
+        val result = DeckLegality.check(
+            leader = s.selectedLeader,
+            deckMap = s.deck,
+            allCards = s.allCards,
+            requireExactly50 = true // when you want “Save” to require full deck
+        )
+        _state.update { it.copy(legality = result) }
     }
 }
 

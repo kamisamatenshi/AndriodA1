@@ -11,20 +11,20 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
 import coil.ImageLoader
 import com.koi.thepiece.audio.AudioManager
-import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckBuilderLeaderScreen
+import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.CreateDeck.LeaderDeckBuildScreen
 import com.koi.thepiece.ui.screens.MenuScreen
 import com.koi.thepiece.ui.screens.OnePieceCardScan
 import com.koi.thepiece.ui.screens.Scan
 import com.koi.thepiece.ui.screens.SettingsScreen
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogScreen
-import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckBuilderLeaderDeckScreen
+import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck.DeckCardBuildScreen
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckListScreen
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModel
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModelFactory
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModelFactory
+import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckListViewModel
+import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckListViewModelFactory
 
 @Composable
 fun AppNavGraph(
@@ -38,6 +38,7 @@ fun AppNavGraph(
     // For deck to use the shared view model for easier control
     val app = LocalContext.current.applicationContext as Application
     val deckVm: DeckViewModel = viewModel(factory = DeckViewModelFactory(app))
+    val deckListVm: DeckListViewModel = viewModel(factory = DeckListViewModelFactory(app))
 
     NavDisplay(
         backStack = backStack,
@@ -106,19 +107,26 @@ fun AppNavGraph(
                 }
 
                 Route.DeckList -> NavEntry(key) {
+                    val app = LocalContext.current.applicationContext as Application
+                    val deckListVm: DeckListViewModel = viewModel(factory = DeckListViewModelFactory(app))
+
                     DeckListScreen(
+                        vm = deckListVm,
                         audio = audioManager,
+                        imageLoader = imageLoader,
                         onBack = {
-                            if (backStack.size > 1) {
-                                backStack.removeAt(backStack.lastIndex)
-                            }
+                            if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
                         },
-                        onGoCreateNewDeck = { backStack.add(Route.DeckBuilderLeader) }
+                        onGoCreateNewDeck = { backStack.add(Route.DeckBuilderLeader) },
+                        onOpenDeck = { deckId ->
+                            deckVm.loadDeck(deckId)                 // load saved deck into shared VM
+                            backStack.add(Route.DeckBuilderLeaderDeck) // jump straight into deck screen
+                        }
                     )
                 }
 
                 Route.DeckBuilderLeader -> NavEntry(key) {
-                    DeckBuilderLeaderScreen(
+                    LeaderDeckBuildScreen(
                         vm = deckVm,
                         audio = audioManager,
                         onBack = {
@@ -133,7 +141,7 @@ fun AppNavGraph(
                 }
 
                 Route.DeckBuilderLeaderDeck -> NavEntry(key) {
-                    DeckBuilderLeaderDeckScreen(
+                    DeckCardBuildScreen(
                         vm = deckVm,
                         audio = audioManager,
                         onBack = {
