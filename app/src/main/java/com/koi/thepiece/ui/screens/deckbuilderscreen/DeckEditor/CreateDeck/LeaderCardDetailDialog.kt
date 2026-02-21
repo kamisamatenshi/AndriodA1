@@ -220,7 +220,7 @@ fun LeaderPreviewDialog(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 25.dp, max = 75.dp)
+                            .heightIn(min = 25.dp, max = 50.dp)
                             .border(1.dp, Color.Gray, MaterialTheme.shapes.small)
                     ) {
                         Column(
