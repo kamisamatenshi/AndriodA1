@@ -53,10 +53,8 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
             }
             _state.update { it.copy(loading = false) }
         }
+
     }
-
-
-
 
     // -------- Filters / Search --------
     fun setLeaderPickMode(){
