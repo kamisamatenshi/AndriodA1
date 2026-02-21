@@ -34,9 +34,11 @@ fun MenuScreen(
     audioManager: AudioManager,
     darkTheme: Boolean,
     onToggleTheme: () -> Unit,
+    onGoDeckList: () -> Unit,
     onGoCatalog: () -> Unit,
     onGoScanner: () -> Unit,
     onGoSettings: () -> Unit,
+    onBack: ()-> Unit
 ) {
     val ctx = LocalContext.current
 
@@ -69,6 +71,7 @@ fun MenuScreen(
     var showBtn1 by remember { mutableStateOf(false) }
     var showBtn2 by remember { mutableStateOf(false) }
     var showBtn3 by remember { mutableStateOf(false) }
+    var showBtn4 by remember { mutableStateOf(false) }
     var showDisclaimer by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -77,6 +80,7 @@ fun MenuScreen(
         delay(120); showBtn1 = true
         delay(120); showBtn2 = true
         delay(120); showBtn3 = true
+        delay(120); showBtn4 = true
         delay(150); showDisclaimer = true
     }
 
@@ -115,6 +119,16 @@ fun MenuScreen(
             AnimatedVisibility(visible = showBtn1, enter = fadeSpec()) {
                 SfxButton(
                     audio = audioManager,
+                    onClick = onGoDeckList,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Go to Deck List")
+                }
+            }
+
+            AnimatedVisibility(visible = showBtn2, enter = fadeSpec()) {
+                SfxButton(
+                    audio = audioManager,
                     onClick = onGoCatalog,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -122,7 +136,7 @@ fun MenuScreen(
                 }
             }
 
-            AnimatedVisibility(visible = showBtn2, enter = fadeSpec()) {
+            AnimatedVisibility(visible = showBtn3, enter = fadeSpec()) {
                 SfxButton(
                     audio = audioManager,
                     onClick = {
@@ -138,7 +152,7 @@ fun MenuScreen(
                 }
             }
 
-            AnimatedVisibility(visible = showBtn3, enter = fadeSpec()) {
+            AnimatedVisibility(visible = showBtn4, enter = fadeSpec()) {
                 SfxButton(
                     audio = audioManager,
                     onClick = onGoSettings,

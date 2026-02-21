@@ -300,7 +300,20 @@ fun CardPreviewDialog(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("Price:")
-                        Text(price?.let { "$it" } ?: "Loading...",)
+                        val displayText = when {
+                            price == null -> "Loading..."
+
+                            isEnglish -> {
+                                val sgd = price.toDouble() / 120.0
+                                "S$${"%.2f".format(sgd)}"
+                            }
+
+                            else -> {
+                                "¥${"%,d".format(price)}"
+                            }
+                        }
+
+                        Text(displayText)
                     }
                 }
 

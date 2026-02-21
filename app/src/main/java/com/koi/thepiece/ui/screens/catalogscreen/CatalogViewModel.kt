@@ -1,24 +1,29 @@
 package com.koi.thepiece.ui.screens.catalogscreen
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.koi.thepiece.AppGraph
+import com.koi.thepiece.data.local.TokenStore
 import com.koi.thepiece.data.model.Card
+import com.koi.thepiece.data.repo.SetCompletion
 import com.koi.thepiece.ui.screens.CardEntry
 import com.koi.thepiece.ui.screens.CardVariant
 import com.koi.thepiece.ui.screens.catalogscreen.components.OpJpMaps
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 
-class CatalogViewModel(app: Application) : AndroidViewModel(app) {
+class CatalogViewModel(app: Application , private val tokenStore: TokenStore) : AndroidViewModel(app) {
 
     private val repo = AppGraph.provideCatalogRepository(app)
 
@@ -43,6 +48,8 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
                 // keep page in range after updates
                 clampPage()
             }
+
+
         }
 
         // Refresh in background (network -> Room upsert)
@@ -50,9 +57,11 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refresh() {
+
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            val result = repo.refreshCards(preloadFirstPageImages = true)
+            val token =tokenStore.tokenFlow.firstOrNull()?.trim().orEmpty()
+            val result = repo.refreshCards(token,preloadFirstPageImages = true)
             result.exceptionOrNull()?.let { e ->
                 _state.update { it.copy(loading = false, error = e.message ?: "Failed to refresh") }
             }
@@ -117,7 +126,8 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun updateQty(card: Card, newQty: Int) {
         viewModelScope.launch {
-            val result = repo.updateOwnedQty(card.id, newQty)
+            val token =tokenStore.tokenFlow.firstOrNull()?.trim().orEmpty()
+            val result = repo.updateOwnedQty(token,card.id, newQty)
             result.exceptionOrNull()?.let { e ->
                 _state.update { it.copy(error = e.message ?: "Failed to update qty") }
             }
@@ -207,6 +217,11 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
             ?: "all"
     }
 
+    fun observeSetCompletion(cardSet: String): Flow<SetCompletion> {
+        return repo.observeSetCompletion(cardSet)
+    }
+
+
     fun fetchPrice(cardUrl: String?) {
         if (cardUrl.isNullOrBlank()) return
         if (_prices.value.containsKey(cardUrl)) return // avoid refetch spam
@@ -255,7 +270,8 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
                         ?: return@forEach
 
                     val current = allCards.find { it.id == cardId }?.ownedQty ?: 0
-                    repo.updateOwnedQty(cardId, current + entry.quantity)
+                    val token =tokenStore.tokenFlow.firstOrNull()?.trim().orEmpty()
+                    repo.updateOwnedQty(token,cardId, current + entry.quantity)
                 }
             clearDetectedCards()
         }

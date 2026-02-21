@@ -42,8 +42,9 @@ fun CatalogScreen(
     audio: AudioManager
 )
  {
+     val context = LocalContext.current
     val app = LocalContext.current.applicationContext as Application
-    val vm: CatalogViewModel = viewModel(factory = CatalogViewModelFactory(app))
+    val vm: CatalogViewModel = viewModel(factory = CatalogViewModelFactory(app,context))
     val s by vm.state.collectAsState()
 
     LaunchedEffect(Unit) {
@@ -124,7 +125,8 @@ fun CatalogScreen(
             CatalogHeaderBlock(
                 setCode = s.setFilter,
                 loading = s.loading,
-                error = s.error
+                error = s.error,
+                viewModel = vm
             )
 
             // Collect suggestions from ViewModel
