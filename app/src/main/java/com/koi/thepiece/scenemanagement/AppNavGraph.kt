@@ -16,6 +16,7 @@ import com.koi.thepiece.ui.screens.catalogscreen.CatalogScreen
 import android.app.Application
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.koi.thepiece.ui.screens.Loginscreen.LoginScreen
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModelFactory
 
@@ -26,12 +27,20 @@ fun AppNavGraph(
     darkTheme: Boolean,
     onToggleTheme: () -> Unit
 ) {
-    val backStack = remember { mutableStateListOf<Route>(Route.Menu) }
+    val backStack = remember { mutableStateListOf<Route>(Route.LoginScreen) }
 
     NavDisplay(
         backStack = backStack,
         entryProvider = { key ->
             when (key) {
+                Route.LoginScreen -> NavEntry(key) {
+                    LoginScreen(
+                        audioManager = audioManager,
+                        darkTheme = darkTheme,
+                        onToggleTheme = onToggleTheme,
+                        onGoToMainmenu = { backStack.add(Route.Menu)}
+                    )
+                }
 
                 Route.Menu -> NavEntry(key) {
                     MenuScreen(
@@ -41,6 +50,11 @@ fun AppNavGraph(
                         onGoCatalog = { backStack.add(Route.Catalog) },
                         onGoScanner = { backStack.add(Route.OCRScan) },
                         onGoSettings = { backStack.add(Route.Settings) },
+                        onBack = {
+                            if (backStack.size > 1) {
+                                backStack.removeAt(backStack.lastIndex)
+                            }
+                        }
                     )
                 }
 

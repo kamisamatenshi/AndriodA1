@@ -29,4 +29,5 @@ object NetworkModule {
         .build()
 
     val catalogApi: CatalogApi = retrofit.create(CatalogApi::class.java)
+    val authApi: AuthApi = retrofit.create(AuthApi::class.java)
 }

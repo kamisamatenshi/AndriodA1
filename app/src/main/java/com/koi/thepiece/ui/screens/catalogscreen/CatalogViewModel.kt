@@ -37,6 +37,8 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
                 // keep page in range after updates
                 clampPage()
             }
+
+
         }
 
         // Refresh in background (network -> Room upsert)

@@ -3,13 +3,13 @@ package com.koi.thepiece.data.repo
 import android.content.Context
 import android.util.Log
 import com.koi.thepiece.data.api.CatalogApi
-import com.koi.thepiece.data.api.UpdateQtyBody
 import com.koi.thepiece.data.db.CardDao
 import com.koi.thepiece.data.model.Card
 import com.koi.thepiece.data.model.toDomain
 import com.koi.thepiece.data.model.toEntity
 import com.koi.thepiece.core.image.ImagePreloader
-import com.koi.thepiece.data.api.GetPriceBody
+import com.koi.thepiece.data.api.dto.GetPriceBody
+import com.koi.thepiece.data.api.dto.UpdateQtyBody
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -97,7 +97,13 @@ class CatalogRepository(
 
             // Then push to server
             runCatching {
-                val res = api.updateQty(UpdateQtyBody(token = token,id = cardId, ownedQty = newQty))
+                val res = api.updateQty(
+                    UpdateQtyBody(
+                        token = token,
+                        id = cardId,
+                        ownedQty = newQty
+                    )
+                )
                 if (res.success != true) {
                     throw IllegalStateException(res.message ?: "Server update failed")
                 }

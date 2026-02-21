@@ -37,6 +37,7 @@ fun MenuScreen(
     onGoCatalog: () -> Unit,
     onGoScanner: () -> Unit,
     onGoSettings: () -> Unit,
+    onBack: ()-> Unit
 ) {
     val ctx = LocalContext.current
 
