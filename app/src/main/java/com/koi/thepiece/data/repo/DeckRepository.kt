@@ -50,7 +50,7 @@ class DeckRepository(private val deckDao: DeckDao) {
                 deckId = deckId,
                 name = name,
                 leaderCardId = leaderCardId,
-                createdAtEpochMs = now, // if you want keep original, fetch first instead
+                createdAtEpochMs = now, // if want keep original, fetch first instead
                 updatedAtEpochMs = now
             )
         )
@@ -61,5 +61,10 @@ class DeckRepository(private val deckDao: DeckDao) {
             DeckCardEntity(deckId = deckId, cardId = cardId, qty = qty)
         }
         deckDao.insertDeckCards(deckCards)
+    }
+
+    suspend fun deleteDeck(deckId: Long) {
+        deckDao.clearDeckCards(deckId)   // delete child rows first
+        deckDao.deleteDeck(deckId)       // then delete deck
     }
 }

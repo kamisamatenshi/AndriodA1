@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +39,7 @@ fun DeckListScreen(
     imageLoader: ImageLoader
 ) {
     val decks by vm.decksUi.collectAsState()
+    var deckToDelete by remember { mutableStateOf<Long?>(null) }
 
     var showBtn1 by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { delay(120); showBtn1 = true }
@@ -85,15 +87,32 @@ fun DeckListScreen(
                         DeckRow(
                             d = d,
                             imageLoader = imageLoader,
-                            onClick = {
-                                deckVm.loadDeck(d.deckId)
-                                onOpenDeck(d.deckId)
-                            }
+                            onClick = { onOpenDeck(d.deckId) },
+                            onDelete = { deckToDelete = d.deckId }   // <- THIS
                         )
                     }
                 }
             }
         }
+    }
+
+    if (deckToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { deckToDelete = null },
+            title = { Text("Delete Deck?") },
+            text = { Text("This action cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteDeck(deckToDelete!!)
+                    deckToDelete = null
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deckToDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -101,37 +120,58 @@ fun DeckListScreen(
 private fun DeckRow(
     d: DeckListItemUi,
     imageLoader: ImageLoader,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDelete: () -> Unit
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
+            .clip(RoundedCornerShape(12.dp)),
         tonalElevation = 1.dp
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(d.leaderImageUrl)
-                    .build(),
-                imageLoader = imageLoader,
-                contentDescription = d.leaderName ?: "Leader",
+            Row(
                 modifier = Modifier
-                    .width(56.dp)
-                    .aspectRatio(0.72f)
-                    .clip(RoundedCornerShape(8.dp))
-            )
+                    .weight(1f)
+                    .clickable(onClick = onClick),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(d.leaderImageUrl)
+                        .build(),
+                    imageLoader = imageLoader,
+                    contentDescription = d.leaderName ?: "Leader",
+                    modifier = Modifier
+                        .width(56.dp)
+                        .aspectRatio(0.72f)
+                        .clip(RoundedCornerShape(8.dp))
+                )
 
-            Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(12.dp))
 
-            Column(Modifier.weight(1f)) {
-                Text(d.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("Leader: ${d.leaderName ?: "Unknown"}", style = MaterialTheme.typography.bodySmall)
-                Text("Cards: ${d.totalCards}/50", style = MaterialTheme.typography.bodySmall)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        d.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "Leader: ${d.leaderName ?: "Unknown"}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text("Cards: ${d.totalCards}/50", style = MaterialTheme.typography.bodySmall)
+                }
+
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete Deck")
+                }
             }
         }
     }

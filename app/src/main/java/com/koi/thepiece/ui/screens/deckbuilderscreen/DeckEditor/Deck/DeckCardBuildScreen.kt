@@ -88,6 +88,8 @@ fun DeckCardBuildScreen(
         vm.setColor("all")
         vm.setRarityFilter("all")
         vm.setCardType("all")
+
+        vm.clearDeck()
     }
 
     var viewMode by rememberSaveable { mutableStateOf(DeckViewMode.GRID) }

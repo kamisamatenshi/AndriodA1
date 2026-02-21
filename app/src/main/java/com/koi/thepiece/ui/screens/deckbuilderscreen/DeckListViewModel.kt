@@ -25,6 +25,12 @@ class DeckListViewModel(app: Application) : AndroidViewModel(app) {
 
     private val allCardsFlow: Flow<List<Card>> = catalogRepo.observeCards()
 
+    fun deleteDeck(deckId: Long) {
+        viewModelScope.launch {
+            deckRepo.deleteDeck(deckId)
+        }
+    }
+
     val decksUi: StateFlow<List<DeckListItemUi>> =
         combine(deckRepo.observeAllDecks(), allCardsFlow) { decks, cards ->
             val cardById = cards.associateBy { it.id }

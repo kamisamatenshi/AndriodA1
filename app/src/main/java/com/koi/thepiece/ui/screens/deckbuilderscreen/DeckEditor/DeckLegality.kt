@@ -46,13 +46,24 @@ object DeckLegality {
             if (totalMain > 50) errors += DeckIssue.Error("Main deck cannot exceed 50 cards. (Now: $totalMain)")
         }
 
-        // Leader color rule: only cards whose color is included on Leader
+        // Leader color rule
         val leaderColors = parseColors(leader.color)
-        deckCards.forEach { (card, qty) ->
-            val cardColors = parseColors(card.color)
-            val ok = cardColors.any { it in leaderColors }
-            if (!ok) {
-                errors += DeckIssue.Error("Color mismatch: ${card.code ?: card.name} (${card.color}) not allowed for Leader (${leader.color}).")
+
+        // Collect deck colors used (ignore "mix" if it ever appears on cards)
+        val deckColorsUsed = deckCards
+            .flatMap { (card, _) -> parseColors(card.color).toList() }
+            .filter { it != "mix" }
+            .toSet()
+
+        if (leaderColors.contains("mix")) {
+            // Mix leader: deck can use at most 2 colors total
+            if (deckColorsUsed.size > 2) {
+                errors += DeckIssue.Error("Mix leader allows at most 2 colors, but deck uses: ${deckColorsUsed.joinToString()}.")
+            }
+        } else {
+            // Normal leader: deck colors must be subset of leader colors
+            if (!deckColorsUsed.all { it in leaderColors }) {
+                errors += DeckIssue.Error("Deck contains colors not included in Leader (${leader.color}).")
             }
         }
 

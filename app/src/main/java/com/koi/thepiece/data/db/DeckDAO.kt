@@ -38,4 +38,10 @@ interface DeckDao {
     @Transaction
     @Query("SELECT * FROM decks WHERE deckId = :deckId")
     suspend fun getDeck(deckId: Long): DeckWithCards?
+
+    @Query("DELETE FROM decks WHERE deckId = :deckId")
+    suspend fun deleteDeck(deckId: Long)
+
+    @Query("DELETE FROM deck_cards WHERE deckId = :deckId")
+    suspend fun deleteDeckCards(deckId: Long)
 }
