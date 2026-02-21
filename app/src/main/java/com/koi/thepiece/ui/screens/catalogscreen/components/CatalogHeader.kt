@@ -1,13 +1,17 @@
 package com.koi.thepiece.ui.screens.catalogscreen.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -51,19 +55,74 @@ fun CatalogHeaderBlock(
 }
 
 @Composable
+//fun SearchBarRow(
+//    query: String,
+//    onQueryChange: (String) -> Unit
+//) {
+//    OutlinedTextField(
+//        value = query,
+//        onValueChange = onQueryChange,
+//        singleLine = true,
+//        placeholder = { Text("Search (code / name / traits)") },
+//        modifier = Modifier
+//            .fillMaxWidth()
+//            .padding(horizontal = 12.dp, vertical = 8.dp)
+//    )
+//}
 fun SearchBarRow(
-    query: String,
-    onQueryChange: (String) -> Unit
+    query: String,                       // Current text inside search field
+    suggestions: List<String>,           // Suggested results
+    onQueryChange: (String) -> Unit,     // Triggered when typing
+    onSuggestionClick: (String) -> Unit  // Triggered when suggestion clicked
 ) {
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        singleLine = true,
-        placeholder = { Text("Search (code / name / traits)") },
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    )
+            .padding(horizontal = 12.dp)
+    ) {
+
+        // The main search text field
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,    // Updates ViewModel
+            singleLine = true,
+            placeholder = { Text("Search (code / name / traits)") },
+            modifier = Modifier
+                .fillMaxWidth()
+        )
+
+        // Only show dropdown if suggestions exist
+        if (suggestions.isNotEmpty()) {
+
+            // Surface creates dropdown card effect
+            Surface(
+                tonalElevation = 4.dp,
+                shadowElevation = 6.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Scrollable suggestion list
+                LazyColumn (
+                    modifier = Modifier.heightIn(max = 220.dp)
+                ) {
+                    items(suggestions) { suggestion ->
+                        // Each suggestion row
+                        Text(
+                            text = suggestion,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .clickable {
+                                    // When clicked:
+                                    // 1) Put suggestion into search bar
+                                    // 2) Hide dropdown
+                                    onSuggestionClick(suggestion)
+                                }
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

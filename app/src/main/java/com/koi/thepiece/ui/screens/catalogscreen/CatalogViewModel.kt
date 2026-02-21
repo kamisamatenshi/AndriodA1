@@ -8,6 +8,7 @@ import com.koi.thepiece.AppGraph
 import com.koi.thepiece.data.model.Card
 import com.koi.thepiece.ui.screens.CardEntry
 import com.koi.thepiece.ui.screens.CardVariant
+import com.koi.thepiece.ui.screens.catalogscreen.components.OpJpMaps
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,13 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _prices = MutableStateFlow<Map<String, Int>>(emptyMap())
     val prices: StateFlow<Map<String, Int>> = _prices
+
+    // Search Recommendations
+    // Holds the list of recommended search suggestions
+    // Example: typing "mon" → ["monkey d luffy", "monkey d garp", ...]
+    private val _suggestions = MutableStateFlow<List<String>>(emptyList())
+    // Exposed as immutable StateFlow so UI can observe it
+    val suggestions: StateFlow<List<String>> = _suggestions
 
     init {
         // Observe local DB (offline cache)
@@ -76,6 +84,10 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSearchQuery(value: String) {
         _state.update { it.copy(searchQuery = value, page = 1) }
+
+        // Search Recommendations
+        // Update suggestions every time user types
+        updateSuggestions(value)
     }
 
 
@@ -249,6 +261,61 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // Search Recommendations
+    private fun updateSuggestions(query: String) {
+        // Remove extra spaces
+        val trimmed = query.trim()
+        // Don't show suggestions if query too short
+        if (trimmed.length < 2) {
+            _suggestions.value = emptyList()
+            return
+        }
+
+        val lowerQuery = trimmed.lowercase()
+
+        // Build a big set of all searchable strings
+        val allPossibleStrings = buildSet<String> {
+            // Card names
+            // Add all card names from database
+            state.value.allCards.forEach {
+                add(it.name)
+                // Add traits too (if exists)
+                it.traits?.let { trait -> add(trait) }
+            }
+
+            // Map keys (english)
+            // Add English keys from NAME_MAP
+            addAll(OpJpMaps.NAME_MAP.keys)
+            // Add English keys from TRAITS_MAP
+            addAll(OpJpMaps.TRAITS_MAP.keys)
+        }
+
+        // Filter anything that CONTAINS the typed text
+        val ranked = allPossibleStrings
+            .filter { it.lowercase().contains(lowerQuery) }
+            // Ranking logic:
+            // 1) Strings that start with query come first
+            // 2) Then shorter strings come first
+            .sortedWith(
+                compareBy<String> {
+                    !it.lowercase().startsWith(lowerQuery)
+                }.thenBy { it.length }
+            )
+            // Limit to 10 suggestions
+            .take(10)
+
+        // Update state
+        _suggestions.value = ranked
+    }
+
+    fun selectSuggestion(suggestion: String) {
+        // When user clicks suggestion,
+        // put it into search bar
+        _state.update { it.copy(searchQuery = suggestion, page = 1) }
+
+        // Clear dropdown after selection
+        _suggestions.value = emptyList()
+    }
 
 
     private val RARITY_OPTIONS = listOf(

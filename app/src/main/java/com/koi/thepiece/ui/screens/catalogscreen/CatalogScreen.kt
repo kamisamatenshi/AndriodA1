@@ -127,9 +127,18 @@ fun CatalogScreen(
                 error = s.error
             )
 
+//            SearchBarRow(
+//                query = s.searchQuery,
+//                onQueryChange = vm::setSearchQuery
+//            )
+            // Collect suggestions from ViewModel
+            val suggestions by vm.suggestions.collectAsState()
+
             SearchBarRow(
-                query = s.searchQuery,
-                onQueryChange = vm::setSearchQuery
+                query = s.searchQuery,                     // Current search text
+                suggestions = suggestions,                 // Suggestions list
+                onQueryChange = vm::setSearchQuery,        // Called when user types
+                onSuggestionClick = vm::selectSuggestion   // Called when suggestion clicked
             )
 
             PagingRow(
