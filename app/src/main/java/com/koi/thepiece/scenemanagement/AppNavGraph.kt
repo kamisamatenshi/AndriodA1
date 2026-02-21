@@ -17,10 +17,17 @@ import com.koi.thepiece.ui.screens.OnePieceCardScan
 import com.koi.thepiece.ui.screens.Scan
 import com.koi.thepiece.ui.screens.SettingsScreen
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogScreen
+
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck.DeckCardBuildScreen
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckListScreen
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModel
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModelFactory
+
+import android.app.Application
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.koi.thepiece.ui.screens.Loginscreen.LoginScreen
+
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModelFactory
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckListViewModel
@@ -33,7 +40,7 @@ fun AppNavGraph(
     darkTheme: Boolean,
     onToggleTheme: () -> Unit
 ) {
-    val backStack = remember { mutableStateListOf<Route>(Route.Menu) }
+    val backStack = remember { mutableStateListOf<Route>(Route.LoginScreen) }
 
     // For deck to use the shared view model for easier control
     val app = LocalContext.current.applicationContext as Application
@@ -44,6 +51,14 @@ fun AppNavGraph(
         backStack = backStack,
         entryProvider = { key ->
             when (key) {
+                Route.LoginScreen -> NavEntry(key) {
+                    LoginScreen(
+                        audioManager = audioManager,
+                        darkTheme = darkTheme,
+                        onToggleTheme = onToggleTheme,
+                        onGoToMainmenu = { backStack.add(Route.Menu)}
+                    )
+                }
 
                 Route.Menu -> NavEntry(key) {
                     MenuScreen(
@@ -54,6 +69,11 @@ fun AppNavGraph(
                         onGoCatalog = { backStack.add(Route.Catalog) },
                         onGoScanner = { backStack.add(Route.OCRScan) },
                         onGoSettings = { backStack.add(Route.Settings) },
+                        onBack = {
+                            if (backStack.size > 1) {
+                                backStack.removeAt(backStack.lastIndex)
+                            }
+                        }
                     )
                 }
 

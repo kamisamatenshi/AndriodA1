@@ -3,13 +3,13 @@ package com.koi.thepiece.data.repo
 import android.content.Context
 import android.util.Log
 import com.koi.thepiece.data.api.CatalogApi
-import com.koi.thepiece.data.api.UpdateQtyBody
 import com.koi.thepiece.data.db.CardDao
 import com.koi.thepiece.data.model.Card
 import com.koi.thepiece.data.model.toDomain
 import com.koi.thepiece.data.model.toEntity
 import com.koi.thepiece.core.image.ImagePreloader
-import com.koi.thepiece.data.api.GetPriceBody
+import com.koi.thepiece.data.api.dto.GetPriceBody
+import com.koi.thepiece.data.api.dto.UpdateQtyBody
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -63,14 +63,21 @@ class CatalogRepository(
             SetCompletion(owned, total, percent)
         }
     }
-    suspend fun refreshCards(preloadFirstPageImages: Boolean = true): Result<Unit> {
+    suspend fun refreshCards(
+        token: String,
+        preloadFirstPageImages: Boolean = true
+    ): Result<Unit> {
         return withContext(Dispatchers.IO) {
             runCatching {
                 val now = System.currentTimeMillis()
-                val remote = api.getCards()
-                val entities = remote.mapNotNull { it.toEntity(now) }
 
+                val res = api.getCards(token)
+                if (res.success != true) {
+                    throw IllegalStateException(res.error ?: "Failed to fetch cards")
+                }
 
+                val remoteCards = res.cards ?: emptyList()
+                val entities = remoteCards.mapNotNull { it.toEntity(now) }
 
                 dao.upsertAll(entities)
 
@@ -82,7 +89,7 @@ class CatalogRepository(
         }
     }
 
-    suspend fun updateOwnedQty(cardId: Int, newQty: Int): Result<Unit> {
+    suspend fun updateOwnedQty(token:String,cardId: Int, newQty: Int ): Result<Unit> {
         return withContext(Dispatchers.IO) {
             // Optimistic local update first (fast UI)
             val now = System.currentTimeMillis()
@@ -90,7 +97,13 @@ class CatalogRepository(
 
             // Then push to server
             runCatching {
-                val res = api.updateQty(UpdateQtyBody(id = cardId, ownedQty = newQty))
+                val res = api.updateQty(
+                    UpdateQtyBody(
+                        token = token,
+                        id = cardId,
+                        ownedQty = newQty
+                    )
+                )
                 if (res.success != true) {
                     throw IllegalStateException(res.message ?: "Server update failed")
                 }

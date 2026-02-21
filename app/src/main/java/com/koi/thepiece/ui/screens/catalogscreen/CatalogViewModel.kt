@@ -37,6 +37,8 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
                 // keep page in range after updates
                 clampPage()
             }
+
+
         }
 
         // Refresh in background (network -> Room upsert)
@@ -46,7 +48,7 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() {
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            val result = repo.refreshCards(preloadFirstPageImages = true)
+            val result = repo.refreshCards(AppGraph.token,preloadFirstPageImages = true)
             result.exceptionOrNull()?.let { e ->
                 _state.update { it.copy(loading = false, error = e.message ?: "Failed to refresh") }
             }
@@ -107,7 +109,7 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun updateQty(card: Card, newQty: Int) {
         viewModelScope.launch {
-            val result = repo.updateOwnedQty(card.id, newQty)
+            val result = repo.updateOwnedQty(AppGraph.token,card.id, newQty)
             result.exceptionOrNull()?.let { e ->
                 _state.update { it.copy(error = e.message ?: "Failed to update qty") }
             }
@@ -250,7 +252,7 @@ class CatalogViewModel(app: Application) : AndroidViewModel(app) {
                         ?: return@forEach
 
                     val current = allCards.find { it.id == cardId }?.ownedQty ?: 0
-                    repo.updateOwnedQty(cardId, current + entry.quantity)
+                    repo.updateOwnedQty(AppGraph.token,cardId, current + entry.quantity)
                 }
             clearDetectedCards()
         }

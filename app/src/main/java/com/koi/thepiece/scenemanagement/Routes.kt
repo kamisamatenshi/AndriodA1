@@ -15,5 +15,6 @@ sealed interface Route : NavKey {
     @Serializable data object DeckBuilderLeaderDeck : Route
 
     @Serializable data object OCRScan : Route
+    @Serializable data object LoginScreen : Route
 
 }
