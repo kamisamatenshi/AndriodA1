@@ -4,6 +4,7 @@ import com.koi.thepiece.data.db.DeckCardEntity
 import com.koi.thepiece.data.db.DeckDao
 import com.koi.thepiece.data.db.DeckEntity
 import com.koi.thepiece.data.db.DeckWithCards
+import com.koi.thepiece.ui.screens.deckbuilderscreen.QtyClass
 
 class DeckRepository(private val deckDao: DeckDao) {
 
@@ -16,7 +17,7 @@ class DeckRepository(private val deckDao: DeckDao) {
     suspend fun saveNewDeck(
         name: String,
         leaderCardId: Int,
-        deckMap: Map<Int, Int> // cardId -> qty
+        deckMap: Map<Int, QtyClass> // cardId -> qty
     ): Long {
         val now = System.currentTimeMillis()
 
@@ -30,7 +31,7 @@ class DeckRepository(private val deckDao: DeckDao) {
         )
 
         val deckCards = deckMap.map { (cardId, qty) ->
-            DeckCardEntity(deckId = deckId, cardId = cardId, qty = qty)
+            DeckCardEntity(deckId = deckId, cardId = cardId, qty.requiredQty)
         }
         deckDao.insertDeckCards(deckCards)
 
@@ -41,7 +42,7 @@ class DeckRepository(private val deckDao: DeckDao) {
         deckId: Long,
         name: String,
         leaderCardId: Int,
-        deckMap: Map<Int, Int>
+        deckMap: Map<Int, QtyClass>
     ) {
         val now = System.currentTimeMillis()
 
@@ -58,7 +59,7 @@ class DeckRepository(private val deckDao: DeckDao) {
         deckDao.clearDeckCards(deckId)
 
         val deckCards = deckMap.map { (cardId, qty) ->
-            DeckCardEntity(deckId = deckId, cardId = cardId, qty = qty)
+            DeckCardEntity(deckId = deckId, cardId = cardId, qty = qty.requiredQty)
         }
         deckDao.insertDeckCards(deckCards)
     }

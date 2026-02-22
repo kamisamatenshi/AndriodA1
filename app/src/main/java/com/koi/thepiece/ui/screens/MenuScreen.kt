@@ -2,6 +2,7 @@ package com.koi.thepiece.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -10,8 +11,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
@@ -23,11 +26,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.koi.thepiece.AppGraph
 import com.koi.thepiece.audio.AudioManager
 import com.koi.thepiece.R
 import com.koi.thepiece.ui.components.SfxButton
 import com.koi.thepiece.ui.components.SfxFAB
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun MenuScreen(
@@ -38,9 +43,38 @@ fun MenuScreen(
     onGoCatalog: () -> Unit,
     onGoScanner: () -> Unit,
     onGoSettings: () -> Unit,
-    onBack: ()-> Unit
+    onLogoutConfirmed :()->Unit
 ) {
     val ctx = LocalContext.current
+    var showLogoutDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    BackHandler {
+        showLogoutDialog = true
+    }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Logout") },
+            text = { Text("Do you want to logout?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLogoutDialog = false
+                        scope.launch {
+                            AppGraph.provideTokenStore(ctx).clearToken()
+                            onLogoutConfirmed()
+                        }
+                    }
+                ) { Text("Logout") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showLogoutDialog = false }
+                ) { Text("Cancel") }
+            }
+        )
+    }
 
     var isMuted by remember { mutableStateOf(audioManager.isMuted()) }
 
@@ -173,8 +207,22 @@ fun MenuScreen(
                 )
             }
         }
+        // Top-left Logout
+        SfxFAB(
+            audio = audioManager,
+            onClick = { showLogoutDialog = true },   // reuse your dialog
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Logout,
+                contentDescription = "Logout"
+            )
+        }
 
-        // Mute Button (TOP RIGHT)
+        // Mute Button (Bottom RIGHT)
         SfxFAB(
             audio = audioManager,
             onClick = {

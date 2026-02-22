@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -27,17 +28,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +43,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -57,11 +53,10 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Scale
 import com.koi.thepiece.data.model.Card
-import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
-import com.koi.thepiece.ui.screens.catalogscreen.components.OverlayCircleButton
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck.DeckViewMode
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckUiState
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModel
+import com.koi.thepiece.ui.screens.deckbuilderscreen.QtyClass
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.text.orEmpty
@@ -84,7 +79,7 @@ fun CardsSection(
             ) {
                 items(deckEntries, key = { it.key }) { (cardId, qty) ->
                     val card = state.allCards.firstOrNull { it.id == cardId } ?: return@items
-                    DeckCardTileList(card, imageLoader, qty, vm)
+                    DeckCardTileList(card, imageLoader, qty, vm , onClick = { vm.openCard(card) })
                 }
             }
         }
@@ -99,7 +94,7 @@ fun CardsSection(
             ) {
                 items(deckEntries, key = { it.key }) { (cardId, qty) ->
                     val card = state.allCards.firstOrNull { it.id == cardId } ?: return@items
-                    DeckCardTileGrid(card, imageLoader, qty, vm)
+                    DeckCardTileGrid(card, imageLoader, qty,vm ,onClick = { vm.openCard(card) })
                 }
             }
         }
@@ -110,29 +105,37 @@ fun CardsSection(
 fun DeckCardTileList(
     card: Card,
     imageLoader: ImageLoader,
-    qty: Int,
-    vm: DeckViewModel
+    qty: QtyClass,
+    vm: DeckViewModel,
+    onClick: () -> Unit
 ){
     DeckCardRow(
         card = card,
+        stockqty = qty.stockQty,
+        requiredqty = qty.requiredQty,
         imageLoader = imageLoader,
+        onClick = onClick,
         trailing = {
             Column(horizontalAlignment = Alignment.End) {
-                Qtybadge(
-                    qty,
-                    modifier = Modifier.align(Alignment.End)
-                )
                 Row(
                     modifier = Modifier
                         .align(Alignment.End)
                         .padding(bottom = 6.dp),
+
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val canMinus = qty > 0
-                    val canPlus = qty < 4
+                    val canMinus = qty.requiredQty > 0
+                    val canPlus = qty.requiredQty < 4
 
                     OverlayCircleButton(text = "−", enabled = canMinus, onClick = { vm.removeFromDeck(card) })
+                    Text(
+                        text = qty.requiredQty.toString(),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.width(24.dp),
+                        textAlign = TextAlign.Center
+                    )
+
                     OverlayCircleButton(text = "+", enabled = canPlus, onClick = { vm.addToDeck(card) })
                 }
             }
@@ -144,8 +147,9 @@ fun DeckCardTileList(
 fun DeckCardTileGrid(
     card: Card,
     imageLoader: ImageLoader,
-    qty: Int,
-    vm: DeckViewModel
+    qty: QtyClass,
+    vm: DeckViewModel,
+    onClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -153,6 +157,7 @@ fun DeckCardTileGrid(
             .clip(RoundedCornerShape(10.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
     ) {
         Box(
             modifier = Modifier
@@ -172,33 +177,21 @@ fun DeckCardTileGrid(
                 modifier = Modifier.fillMaxSize()
             )
 
+            // Stock (top-left)
             Qtybadge(
-                qty,
-                modifier = Modifier.align(Alignment.TopEnd)
+                qty.stockQty,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
             )
 
-            Row(
+            // Required (top-right)
+            RequiredBadge(
+                qty.requiredQty,
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val canMinus = qty > 0
-                val canPlus = qty < 4
-
-                OverlayCircleButton(
-                    text = "−",
-                    enabled = canMinus,
-                    onClick = { vm.removeFromDeck(card) }
-                )
-
-                OverlayCircleButton(
-                    text = "+",
-                    enabled = canPlus,
-                    onClick = { vm.addToDeck(card) }
-                )
-            }
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+            )
         }
 
 
@@ -310,6 +303,65 @@ fun Qtybadge(qty: Int, modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
+fun RequiredBadge(
+    qty: Int,
+    modifier: Modifier = Modifier
+) {
+
+    val pop = remember { Animatable(1f) }
+    LaunchedEffect(qty) {
+
+        pop.snapTo(1f)
+        pop.animateTo(1.12f, tween(120, easing = LinearEasing))
+        pop.animateTo(1f, tween(160, easing = LinearEasing))
+
+    }
+
+
+    Surface(
+        modifier = modifier.size(22.dp)
+            .graphicsLayer {
+                scaleX = pop.value
+                scaleY = pop.value
+                shape = CircleShape
+                clip = true
+            },
+        shape = CircleShape,
+        color = Color.White,
+        tonalElevation = 4.dp,
+        shadowElevation = 4.dp
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = qty.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Black
+            )
+        }
+    }
+}
+
+@Composable
+fun ReqStockPill(
+    req: Int,
+    stock: Int,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(999.dp),
+        color = Color.White.copy(alpha = 0.92f),
+        shadowElevation = 6.dp
+    ) {
+        Text(
+            text = "${req}/${stock}",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.Black,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+        )
+    }
+}
 @Composable
 fun OverlayCircleButton(
     text: String,

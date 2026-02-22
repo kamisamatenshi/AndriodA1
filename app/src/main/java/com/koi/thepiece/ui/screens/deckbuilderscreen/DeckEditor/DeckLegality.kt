@@ -21,7 +21,7 @@ object DeckLegality {
 
     fun check(
         leader: Card?,
-        deckMap: Map<Int, Int>,   // cardId -> qty
+        deckMap: Map<Int, QtyClass>,   // cardId -> qty
         allCards: List<Card>,
         requireExactly50: Boolean = false
     ): DeckLegalityResult {
@@ -36,7 +36,7 @@ object DeckLegality {
 
         val deckCards: List<Pair<Card, Int>> = deckMap.mapNotNull { (cardId, qty) ->
             val c = allCards.firstOrNull { it.id == cardId }
-            if (c == null) null else (c to qty)
+            if (c == null) null else (c to qty.requiredQty)
         }
 
         val totalMain = deckCards.sumOf { it.second }

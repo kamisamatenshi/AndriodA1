@@ -37,3 +37,8 @@ data class CardEntity(
     val price:Int?,
     val updatedAtEpochMs: Long
 )
+
+data class OwnedQtyRow(
+    val id: Int,
+    val ownedQty: Int
+)

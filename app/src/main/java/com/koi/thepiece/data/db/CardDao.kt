@@ -23,4 +23,10 @@ interface CardDao {
 
     @Query("DELETE FROM cards")
     suspend fun clear()
+
+    @Query("SELECT ownedQty FROM cards WHERE id = :id LIMIT 1")
+    suspend fun getOwnedQtyById(id: Int): Int?
+
+    @Query("SELECT id, ownedQty FROM cards")
+    suspend fun getAllOwnedQty(): List<OwnedQtyRow>
 }

@@ -83,7 +83,6 @@ fun DeckCardBuildScreen(
 
     LaunchedEffect(Unit) {
         vm.closeModal()
-
         vm.setSetFilter("all")
         vm.setColor("all")
         vm.setRarityFilter("all")
@@ -238,12 +237,12 @@ fun DeckCardBuildScreen(
 
                 val tabs = listOf("Leader", "Cards")
 
-                val totalCards = s.deck.values.sum()
+                val totalCards = s.deck.values.sumOf { it.requiredQty }
 
                 val totalYen = s.deck.entries.sumOf { (cardId, qty) ->
                     val card = s.allCards.firstOrNull { it.id == cardId }
                     val yen = prices[card?.yuyuUrl] ?: 0
-                    yen * qty
+                    yen * qty.requiredQty
                 }
 
                 val missingCount = s.deck.keys.count { cardId ->
@@ -415,13 +414,20 @@ fun DeckCardBuildScreen(
         }
 
         if (s.selected != null) {
+
+            val isNormal = s.selected!!.type.equals("Event", true) ||
+                    s.selected!!.type.equals("Stage", true) ||
+                    s.selected!!.type.equals("Normal", true)
+
             DeckPreviewDialog(
                 card = s.selected!!,
                 imageLoader = imageLoader,
                 onDismiss = vm::closeModal,
                 viewModel = vm,
+                normal = isNormal,
                 onAddToDeck = vm::addToDeck
             )
+
         }
     }
 }

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavEntry
@@ -24,6 +25,7 @@ import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModel
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModelFactory
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.koi.thepiece.AppGraph
 import com.koi.thepiece.ui.screens.Loginscreen.LoginScreen
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModelFactory
@@ -64,11 +66,12 @@ fun AppNavGraph(
                         onGoCatalog = { backStack.add(Route.Catalog) },
                         onGoScanner = { backStack.add(Route.OCRScan) },
                         onGoSettings = { backStack.add(Route.Settings) },
-                        onBack = {
-                            if (backStack.size > 1) {
-                                backStack.removeAt(backStack.lastIndex)
-                            }
+
+                        onLogoutConfirmed = {
+                            backStack.clear()
+                            backStack.add(Route.LoginScreen)  // go to login screen
                         }
+
                     )
                 }
 

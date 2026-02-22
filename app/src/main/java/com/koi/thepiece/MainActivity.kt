@@ -22,15 +22,20 @@ import com.koi.thepiece.scenemanagement.AppNavGraph
 import com.koi.thepiece.ui.theme.ThePieceTheme
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var audio: AudioManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 
+        audio = AudioManager(applicationContext)
+
         setContent {
             val imageLoader: ImageLoader = remember { AppImageLoader.build(this) }
-            val audio = remember { AudioManager(applicationContext) }
+
 
             var darkTheme by rememberSaveable { mutableStateOf(false) }
 
@@ -40,12 +45,6 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-
-                    DisposableEffect(Unit) {
-                        audio.playBgm(R.raw.bgm, loop = true)
-                        onDispose { audio.onDestroy() }
-                    }
-
                     AppNavGraph(
                         imageLoader = imageLoader,
                         audioManager = audio,
@@ -55,5 +54,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+    override fun onStart() {
+        super.onStart()
+        audio.playBgm(R.raw.bgm, loop = true) // or audio.resumeBgm()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        audio.resumeBgm()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        audio.pauseBgm() // or audio.pauseBgm()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        audio.onDestroy()
     }
 }

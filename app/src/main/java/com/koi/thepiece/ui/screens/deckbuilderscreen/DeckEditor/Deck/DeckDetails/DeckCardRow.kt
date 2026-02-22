@@ -2,6 +2,8 @@ package com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck.DeckDetail
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,9 +30,12 @@ import com.koi.thepiece.data.model.Card
 @Composable
 fun DeckCardRow(
     card: Card,
+    stockqty: Int,
+    requiredqty: Int,
     imageLoader: ImageLoader,
     modifier: Modifier = Modifier,
-    trailing: (@Composable () -> Unit)? = null
+    onClick: () -> Unit,
+    trailing: @Composable (() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -42,25 +47,38 @@ fun DeckCardRow(
                 RoundedCornerShape(12.dp)
             )
             .background(MaterialTheme.colorScheme.surface)
-            .padding(10.dp),
+            .padding(10.dp)
+            .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(card.imageUrl)
-                .diskCachePolicy(CachePolicy.ENABLED)
-                .memoryCachePolicy(CachePolicy.ENABLED)
-                .crossfade(true)
-                .scale(Scale.FIT)
-                .build(),
-            imageLoader = imageLoader,
-            contentDescription = card.code ?: "Card",
+        Box(
             modifier = Modifier
                 .width(72.dp)
                 .aspectRatio(0.72f)
-                .clip(RoundedCornerShape(8.dp))
         )
+        {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(card.imageUrl)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .crossfade(true)
+                    .scale(Scale.FIT)
+                    .build(),
+                imageLoader = imageLoader,
+                contentDescription = card.code ?: "Card",
+                modifier = Modifier
+                    .width(72.dp)
+                    .aspectRatio(0.72f)
+                    .clip(RoundedCornerShape(8.dp))
+            )
+            Qtybadge(
+                qty = stockqty,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
 
+            )
+        }
         Spacer(Modifier.width(12.dp))
 
         Column(Modifier.weight(1f)) {

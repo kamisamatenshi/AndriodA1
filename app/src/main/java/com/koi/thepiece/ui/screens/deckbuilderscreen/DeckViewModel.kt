@@ -10,8 +10,10 @@ import com.koi.thepiece.data.local.TokenStore
 import com.koi.thepiece.data.model.Card
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogSearchQueryExpander
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogUiState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -25,7 +27,13 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
 
     private val repo = AppGraph.provideCatalogRepository(app)
     private val deckRepo = AppGraph.provideDeckRepository(app)
+
+    private val _ownedMap = MutableStateFlow<Map<Int, Int>>(emptyMap())
+    val ownedMap = _ownedMap.asStateFlow()
+
+
     private val _state = MutableStateFlow(DeckUiState())
+
     val state: StateFlow<DeckUiState> = _state
 
     private val _saveResult = MutableStateFlow<Long?>(null)
@@ -40,8 +48,12 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
                 // keep page in range after updates
                 clampPage()
             }
+
         }
 
+        viewModelScope.launch(Dispatchers.IO) {
+            _ownedMap.value = repo.getOwnedQtyMap()
+        }
         // Refresh in background (network -> Room upsert)
         refresh()
     }
@@ -63,6 +75,7 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
     fun setLeaderPickMode(){
         mode = DeckEditorMode.Leader
     }
+
 
     fun setCardPickMode(){
         mode = DeckEditorMode.Card
@@ -248,39 +261,66 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
 
     // for deck list
     fun clearDeck() {
-        _state.update { it.copy(deck = emptyMap<Int, Int>()) }
+        _state.update { it.copy(deck = emptyMap<Int, QtyClass>()) }
         recomputeLegality()
     }
 
     fun addToDeck(card: Card) {
         _state.update { s ->
-            val currentQty = s.deck[card.id] ?: 0
-            val totalCards = s.deck.values.sum()
+            val current = s.deck[card.id]
+            val currentQty = current?.requiredQty ?: 0
+            val totalCards = s.deck.values.sumOf { it.requiredQty }
+
             if (totalCards >= 50) return@update s
             if (currentQty >= 4) return@update s
 
+            val stockQty = _ownedMap.value[card.id] ?: 0
+
             val newDeck = s.deck.toMutableMap()
-            newDeck[card.id] = currentQty + 1
+
+            val updated = if (current == null) {
+                QtyClass(requiredQty = 1, stockQty = stockQty)
+            } else {
+                current.copy(
+                    requiredQty = currentQty + 1,
+                    stockQty = stockQty
+                )
+            }
+
+            newDeck[card.id] = updated
             s.copy(deck = newDeck)
         }
+
         recomputeLegality()
     }
 
     fun removeFromDeck(card: Card) {
         _state.update { s ->
-            val currentQty = s.deck[card.id] ?: 0
+            val current = s.deck[card.id] ?: return@update s
+            val currentQty = current.requiredQty
             if (currentQty <= 0) return@update s
 
-            val newDeck: MutableMap<Int, Int> = s.deck.toMutableMap()
+            val newDeck = s.deck.toMutableMap()
 
-            if (currentQty == 1) newDeck.remove(card.id)
-            else newDeck[card.id] = currentQty - 1
+            if (currentQty == 1) {
+                newDeck.remove(card.id)
+            } else {
+                newDeck[card.id] = current.copy(requiredQty = currentQty - 1)
+            }
 
             s.copy(deck = newDeck)
         }
         recomputeLegality()
     }
 
+    fun getFromDeckQty(card :Card):Int{
+        val s = _state.value
+        return s.deck[card.id]?.requiredQty ?: 0
+    }
+
+    fun getFromStockQty(cardID: Int): Int {
+        return _ownedMap.value[cardID] ?: 0
+    }
     private val _prices = MutableStateFlow<Map<String, Int>>(emptyMap())
     val prices: StateFlow<Map<String, Int>> = _prices
 
@@ -333,6 +373,7 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
         }
     }
 
+
     fun loadDeck(deckId: Long) {
         viewModelScope.launch {
             val loaded = deckRepo.getDeck(deckId) ?: return@launch
@@ -340,7 +381,8 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
             val leaderCard = _state.value.allCards
                 .firstOrNull { it.id == loaded.deck.leaderCardId }
 
-            val deckMap = loaded.cards.associate { it.cardId to it.qty }
+
+            val deckMap = loaded.cards.associate { it.cardId to QtyClass(it.qty , repo.getStockQty(it.cardId) ) }
 
             _state.update {
                 it.copy(

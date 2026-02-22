@@ -32,6 +32,14 @@ class CatalogRepository(
     fun observeCards(): Flow<List<Card>> =
         dao.observeAll().map { list -> list.map { it.toDomain() } }
 
+    suspend fun getStockQty(cardId: Int): Int = withContext(Dispatchers.IO) {
+        dao.getOwnedQtyById(cardId) ?: 0
+    }
+
+    suspend fun getOwnedQtyMap(): Map<Int, Int> = withContext(Dispatchers.IO) {
+        dao.getAllOwnedQty().associate { it.id to it.ownedQty }
+    }
+
     fun observeSetCompletion(cardSet: String): Flow<SetCompletion> {
         val target = norm(cardSet)
 

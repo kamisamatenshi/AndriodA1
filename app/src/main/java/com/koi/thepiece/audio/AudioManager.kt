@@ -59,6 +59,9 @@ class AudioManager(private val context: Context) {
     // ----------------------------
 
     private var bgmPlayer: MediaPlayer? = null
+
+    private var bgmResId: Int? = null
+
     private val activeSfxPlayers = mutableSetOf<MediaPlayer>()
 
     // ----------------------------
@@ -275,21 +278,20 @@ class AudioManager(private val context: Context) {
     // ----------------------------
 
     fun playBgm(resId: Int, loop: Boolean = true) {
-        stopBgm()
-
-        val mp = MediaPlayer.create(context, resId) ?: return
-        configureMusicAttributes(mp)
-
-        mp.isLooping = loop
-        mp.setOnErrorListener { player, _, _ ->
-            safeRelease(player)
-            bgmPlayer = null
-            true
+        // if same track already exists, just ensure it's playing
+        if (bgmPlayer != null && bgmResId == resId) {
+            bgmPlayer?.isLooping = loop
+            if (bgmPlayer?.isPlaying == false) bgmPlayer?.start()
+            return
         }
 
-        bgmPlayer = mp
-        applyBgmVolume()
-        mp.start()
+        // new track
+        stopBgmFully()
+        bgmResId = resId
+        bgmPlayer = MediaPlayer.create(context, resId).apply {
+            isLooping = loop
+            start()
+        }
     }
 
     // ----------------------------
@@ -324,11 +326,17 @@ class AudioManager(private val context: Context) {
     }
 
     fun pauseBgm() {
-        bgmPlayer?.pause()
+        bgmPlayer?.let { if (it.isPlaying) it.pause() }
+    }
+
+    fun stopBgmFully() {
+        bgmPlayer?.release()
+        bgmPlayer = null
+        bgmResId = null
     }
 
     fun resumeBgm() {
-        bgmPlayer?.start()
+        bgmPlayer?.let { if (!it.isPlaying) it.start() }
     }
 
     fun stopBgm() {

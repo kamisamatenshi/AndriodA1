@@ -56,6 +56,7 @@ fun DeckPreviewDialog(
     imageLoader: ImageLoader,
     onDismiss: () -> Unit,
     viewModel : DeckViewModel,
+    normal : Boolean,
     onAddToDeck: (Card) -> Unit
 ) {
     val prices by viewModel.prices.collectAsState()
@@ -69,7 +70,9 @@ fun DeckPreviewDialog(
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
-    var tempQty by remember { mutableStateOf(1) }
+
+    val ui by viewModel.state.collectAsState()   // <-- StateFlow<DeckUiState>
+    val qtyInDeck = ui.deck[card.id]?.requiredQty ?: 0
 
     val state = rememberTransformableState { zoomChange, panChange, _ ->
         scale = (scale * zoomChange).coerceIn(1f, 4f)
@@ -327,62 +330,51 @@ fun DeckPreviewDialog(
                         Text(displayText)
                     }
                 }
-
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-
-                    // Quantity selector row
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                if (normal) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
 
-                        // Minus
-                        OverlayCircleButton(
-                            text = "−",
-                            enabled = tempQty > 1,
-                            onClick = { tempQty-- }
-                        )
-
-                        // Qty display
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            tonalElevation = 1.dp,
-                            modifier = Modifier.padding(horizontal = 4.dp)
+                        // Quantity selector row
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Box(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                contentAlignment = Alignment.Center
+
+                            // Minus
+                            OverlayCircleButton(
+                                text = "−",
+                                enabled = qtyInDeck > 0,
+                                onClick = { viewModel.removeFromDeck(card) }
+                            )
+
+                            // Qty display
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                tonalElevation = 1.dp,
+                                modifier = Modifier.padding(horizontal = 4.dp)
                             ) {
-                                Text(
-                                    text = tempQty.toString(),
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                            }
-                        }
-
-                        // Plus
-                        OverlayCircleButton(
-                            text = "+",
-                            enabled = tempQty < 4,
-                            onClick = { tempQty++ }
-                        )
-
-
-                        // Add to deck button
-                        OutlinedButton(
-                            onClick = {
-                                repeat(tempQty) {
-                                    onAddToDeck(card)
+                                Box(
+                                    modifier = Modifier.padding(
+                                        horizontal = 16.dp,
+                                        vertical = 8.dp
+                                    ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = qtyInDeck.toString(),
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
                                 }
-                                tempQty = 1
-                                onDismiss()
-                            },
-                            modifier = Modifier.fillMaxWidth(0.7f)
-                        ) {
-                            Text("Add")
+                            }
+
+                            // Plus
+                            OverlayCircleButton(
+                                text = "+",
+                                enabled = qtyInDeck < 4,
+                                onClick = { viewModel.addToDeck(card) }
+                            )
                         }
                     }
                 }

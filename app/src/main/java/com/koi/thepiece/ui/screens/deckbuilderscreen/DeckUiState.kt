@@ -2,6 +2,10 @@ package com.koi.thepiece.ui.screens.deckbuilderscreen
 
 import com.koi.thepiece.data.model.Card
 
+data class QtyClass(
+    val requiredQty: Int,
+    val stockQty: Int
+)
 data class DeckUiState(
     val loading: Boolean = true,
     val error: String? = null,
@@ -31,11 +35,13 @@ data class DeckUiState(
     val price: Int =0,
 
     val selectedLeader: Card? = null,
-    val deck: Map<Int, Int> = emptyMap(), // cardId -> qty
+    val deck: Map<Int, QtyClass> = emptyMap(), // cardId -> qty
 
     val deckId: Long? = null,
     val deckName: String = "",
     val editingDeckId: Long? = null,
-    val legality: DeckLegalityResult? = null
+    val legality: DeckLegalityResult? = null,
+
+
 
 )
