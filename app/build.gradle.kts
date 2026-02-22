@@ -70,6 +70,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.compose.runtime)
     implementation(libs.androidx.compose.animation)
+    implementation(libs.androidx.camera.camera2.pipe)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

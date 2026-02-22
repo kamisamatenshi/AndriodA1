@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -173,11 +174,14 @@ fun DeckCardBuildScreen(
                     error = s.error
                 )
 
+                // Collect suggestions from ViewModel
+                val suggestions by vm.suggestions.collectAsState()
+
                 SearchBarRow(
                     query = s.searchQuery,
-                    suggestions = emptyList(),
+                    suggestions = suggestions,
                     onQueryChange = vm::setSearchQuery,
-                    onSuggestionClick = { }
+                    onSuggestionClick = vm::selectSuggestion
                 )
 
                 PagingRow(
@@ -235,10 +239,13 @@ fun DeckCardBuildScreen(
             ) {
                 var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
-                val tabs = listOf("Leader", "Cards")
+
 
                 val totalCards = s.deck.values.sumOf { it.requiredQty }
-
+                val tabs = listOf(
+                    "Leader",
+                    "Cards ($totalCards/50)"
+                )
                 val totalYen = s.deck.entries.sumOf { (cardId, qty) ->
                     val card = s.allCards.firstOrNull { it.id == cardId }
                     val yen = prices[card?.yuyuUrl] ?: 0
@@ -262,54 +269,48 @@ fun DeckCardBuildScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    Text(
-                        text = "($totalCards/50)",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-
-                    // push price+button to the right
-                    Spacer(modifier = Modifier.weight(1f))
-
                     Text(
                         text = priceText,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
 
-                    OutlinedButton(
-                        onClick = { showValidateDialog = true },
-                        enabled = (s.selectedLeader != null)
+                    Spacer(Modifier.width(8.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text("Validate")
-                    }
+                        OutlinedButton(
+                            onClick = { showValidateDialog = true },
+                            enabled = (s.selectedLeader != null),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) { Text("Validate", maxLines = 1) }
 
-                    val isEditing = (s.deckId != null)
+                        val isEditing = (s.deckId != null)
 
-                    OutlinedButton(
-                        onClick = {
-                            if (isEditing) {
-                                vm.saveDeck(s.deckName)   // update in-place
-                            } else {
-                                showSaveDialog = true     // ask name once
+                        OutlinedButton(
+                            onClick = {
+                                showSaveDialog = true
                                 deckName = s.deckName
-                            }
-                        },
-                        enabled = (s.selectedLeader != null && s.deck.isNotEmpty())
-                    ) {
-                        Text(if (isEditing) "Update Deck" else "Save Deck")
-                    }
+                            },
+                            enabled = (s.selectedLeader != null && s.deck.isNotEmpty()),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) { Text(if (isEditing) "Update Deck" else "Save Deck", maxLines = 1) }
 
-                    IconButton(onClick = {
-                        deckViewMode =
-                            if (deckViewMode == DeckViewMode.GRID) DeckViewMode.LIST else DeckViewMode.GRID
-                    }) {
-                        Icon(
-                            imageVector = if (deckViewMode == DeckViewMode.GRID) Icons.Filled.ViewList else Icons.Filled.GridView,
-                            contentDescription = "Change view"
-                        )
+                        IconButton(onClick = {
+                            deckViewMode =
+                                if (deckViewMode == DeckViewMode.GRID) DeckViewMode.LIST else DeckViewMode.GRID
+                        }) {
+                            Icon(
+                                imageVector = if (deckViewMode == DeckViewMode.GRID) Icons.Filled.ViewList else Icons.Filled.GridView,
+                                contentDescription = "Change view"
+                            )
+                        }
                     }
                 }
 

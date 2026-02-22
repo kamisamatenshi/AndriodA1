@@ -10,6 +10,7 @@ import com.koi.thepiece.data.local.TokenStore
 import com.koi.thepiece.data.model.Card
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogSearchQueryExpander
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogUiState
+import com.koi.thepiece.ui.screens.catalogscreen.components.OpJpMaps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +41,9 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
     val saveResult: StateFlow<Long?> = _saveResult
     var mode = DeckEditorMode.Leader
 
+    private val _suggestions = MutableStateFlow<List<String>>(emptyList())
+    val suggestions: StateFlow<List<String>> = _suggestions
+
     init {
         // Observe local DB (offline cache)
         viewModelScope.launch {
@@ -58,6 +62,8 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
         refresh()
     }
 
+
+
     fun refresh() {
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
@@ -69,8 +75,71 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
             _state.update { it.copy(loading = false) }
         }
 
+        viewModelScope.launch(Dispatchers.IO) {
+            _ownedMap.value = repo.getOwnedQtyMap()
+        }
+
+    }
+    private fun updateSuggestions(query: String) {
+        // Remove extra spaces
+        val trimmed = query.trim()
+        // Don't show suggestions if query too short
+        if (trimmed.length < 2) {
+            _suggestions.value = emptyList()
+            return
+        }
+
+        val lowerQuery = trimmed.lowercase()
+
+        // Build a big set of all searchable strings
+        val allPossibleStrings = buildSet<String> {
+            // Card names
+            // Add all card names from database
+            state.value.allCards.forEach {
+                add(it.name)
+                // Add traits too (if exists)
+                it.traits?.let { trait -> add(trait) }
+            }
+
+            // Map keys (english)
+            // Add English keys from NAME_MAP
+            addAll(OpJpMaps.NAME_MAP.keys)
+            // Add English keys from TRAITS_MAP
+            addAll(OpJpMaps.TRAITS_MAP.keys)
+        }
+
+        // Filter anything that CONTAINS the typed text
+        val ranked = allPossibleStrings
+            .filter { it.lowercase().contains(lowerQuery) }
+            // Ranking logic:
+            // 1) Strings that start with query come first
+            // 2) Then shorter strings come first
+            .sortedWith(
+                compareBy<String> {
+                    !it.lowercase().startsWith(lowerQuery)
+                }.thenBy { it.length }
+            )
+            // Limit to 10 suggestions
+            .take(10)
+
+        // Update state
+        _suggestions.value = ranked
+    }
+    fun selectSuggestion(suggestion: String) {
+        // When user clicks suggestion,
+        // put it into search bar
+        _state.update { it.copy(searchQuery = suggestion, page = 1) }
+
+        // Clear dropdown after selection
+        _suggestions.value = emptyList()
     }
 
+    fun refreshOwnedMap()
+    {
+        viewModelScope.launch(Dispatchers.IO) {
+            _ownedMap.value = repo.getOwnedQtyMap()
+        }
+    }
     // -------- Filters / Search --------
     fun setLeaderPickMode(){
         mode = DeckEditorMode.Leader
@@ -100,6 +169,10 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
 
     fun setSearchQuery(value: String) {
         _state.update { it.copy(searchQuery = value, page = 1) }
+
+        // Search Recommendations
+        // Update suggestions every time user types
+        updateSuggestions(value)
     }
 
 
@@ -319,6 +392,7 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
     }
 
     fun getFromStockQty(cardID: Int): Int {
+        refreshOwnedMap()
         return _ownedMap.value[cardID] ?: 0
     }
     private val _prices = MutableStateFlow<Map<String, Int>>(emptyMap())
@@ -350,9 +424,11 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
         val cleanName = name.trim()
 
         viewModelScope.launch {
+            val token =tokenStore.tokenFlow.firstOrNull()?.trim().orEmpty()
             if (s.deckId == null) {
                 // NEW deck
-                val newId = deckRepo.saveNewDeck(
+                val newId = deckRepo.saveNewDeckServerFirst(
+                    token,
                     name = cleanName,
                     leaderCardId = leader.id,
                     deckMap = s.deck
@@ -361,8 +437,10 @@ class DeckViewModel(app: Application, private val tokenStore: TokenStore) : Andr
                 _saveResult.value = newId
             } else {
                 // UPDATE existing deck
-                deckRepo.overwriteExistingDeck(
-                    deckId = s.deckId!!,
+
+                deckRepo.overwriteExistingDeckServerFirst(
+                    token,
+                    deckId = s.deckId,
                     name = cleanName,
                     leaderCardId = leader.id,
                     deckMap = s.deck

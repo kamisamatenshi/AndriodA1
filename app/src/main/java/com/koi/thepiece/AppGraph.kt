@@ -41,7 +41,8 @@ object AppGraph {
     fun provideDeckRepository(context: Context): DeckRepository {
         return deckRepo ?: synchronized(this) {
             deckRepo ?: DeckRepository(
-                deckDao = provideDb(context).deckDao()
+                deckDao = provideDb(context).deckDao(),
+                api = NetworkModule.deckApi,
             ).also { deckRepo = it }
         }
     }

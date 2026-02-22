@@ -16,7 +16,8 @@ data class DeckListItemUi(
     val leaderName: String?,
     val leaderImageUrl: String?,
     val totalCards: Int,
-    val updatedAtEpochMs: Long
+    val updatedAtEpochMs: Long,
+    val sharecode: String?
 )
 
 class DeckListViewModel(app: Application ,private val tokenStore: TokenStore ) : AndroidViewModel(app) {
@@ -26,14 +27,58 @@ class DeckListViewModel(app: Application ,private val tokenStore: TokenStore ) :
 
     private val allCardsFlow: Flow<List<Card>> = catalogRepo.observeCards()
 
+    private val _snackbar = MutableSharedFlow<String>()
+    val snackbar = _snackbar.asSharedFlow()
+
+    init{
+        viewModelScope.launch {
+            val token = tokenStore.tokenFlow.firstOrNull()?.trim().orEmpty()
+            if (token.isNotEmpty()) {
+                runCatching { deckRepo.syncOwnedDecksFromServer(token) }
+            }
+        }
+    }
+
+    fun refreshDecksFromServer() {
+        viewModelScope.launch {
+            val token = tokenStore.tokenFlow.firstOrNull()?.trim().orEmpty()
+            if (token.isNotEmpty()) {
+                runCatching { deckRepo.syncOwnedDecksFromServer(token) }
+            }
+        }
+    }
+
+    fun importDeckByShareCode(code: String) {
+        viewModelScope.launch {
+            runCatching {
+                val token = tokenStore.tokenFlow.firstOrNull()?.trim().orEmpty()
+                val resp = deckRepo.importDeckByShareCode(token, code)
+
+                if (resp.alreadyOwned == true) {
+                    _snackbar.emit("Already owned!")
+                } else {
+                    _snackbar.emit("Imported successfully!")
+                    deckRepo.syncOwnedDecksFromServer(token)
+                }
+            }.onFailure {
+                _snackbar.emit(it.message ?: "Import failed")
+            }
+        }
+    }
+
     fun deleteDeck(deckId: Long) {
         viewModelScope.launch {
-            deckRepo.deleteDeck(deckId)
+            val token =tokenStore.tokenFlow.firstOrNull()?.trim().orEmpty()
+            deckRepo.deleteDeckServerFirst(token,deckId)
         }
     }
 
     val decksUi: StateFlow<List<DeckListItemUi>> =
-        combine(deckRepo.observeAllDecks(), allCardsFlow) { decks, cards ->
+        combine(
+            deckRepo.observeAllDecks(),
+            allCardsFlow,
+            deckRepo.shareCodeMap
+        ) { decks, cards ,shareMap ->
             val cardById = cards.associateBy { it.id }
 
             decks.map { d ->
@@ -45,7 +90,8 @@ class DeckListViewModel(app: Application ,private val tokenStore: TokenStore ) :
                     leaderName = leader?.name,
                     leaderImageUrl = leader?.imageUrl,
                     totalCards = d.cards.sumOf { it.qty },
-                    updatedAtEpochMs = d.deck.updatedAtEpochMs
+                    updatedAtEpochMs = d.deck.updatedAtEpochMs,
+                    sharecode = shareMap[d.deck.serverDeckId]
                 )
             }
         }

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,20 +47,39 @@ fun MenuScreen(
     onLogoutConfirmed :()->Unit
 ) {
     val ctx = LocalContext.current
-    var showLogoutDialog by remember { mutableStateOf(false) }
+    var showLogoutDialog by rememberSaveable  { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    BackHandler {
+    var logoutBusy by rememberSaveable { mutableStateOf(false) }
+    var interactionsReady by remember { mutableStateOf(false) }
+    var logoutEnabled by remember { mutableStateOf(false) }
+    var backLocked by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.android.awaitFrame()
+        interactionsReady = true
+    }
+    LaunchedEffect(backLocked) {
+        if (backLocked) {
+            delay(350)
+            backLocked = false
+        }
+    }
+    BackHandler(enabled = logoutEnabled && !showLogoutDialog) {
+        if (backLocked) return@BackHandler
+        backLocked = true
         showLogoutDialog = true
     }
-
-    if (showLogoutDialog) {
+    if (showLogoutDialog&&logoutEnabled) {
         AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
+            onDismissRequest = { if (!logoutBusy) showLogoutDialog = false },
             title = { Text("Logout") },
             text = { Text("Do you want to logout?") },
             confirmButton = {
                 TextButton(
+                    enabled = !logoutBusy,
                     onClick = {
+                        if (logoutBusy) return@TextButton
+                        logoutBusy = true
                         showLogoutDialog = false
                         scope.launch {
                             AppGraph.provideTokenStore(ctx).clearToken()
@@ -70,6 +90,7 @@ fun MenuScreen(
             },
             dismissButton = {
                 TextButton(
+                    enabled = !logoutBusy,
                     onClick = { showLogoutDialog = false }
                 ) { Text("Cancel") }
             }
@@ -116,6 +137,8 @@ fun MenuScreen(
         delay(120); showBtn3 = true
         delay(120); showBtn4 = true
         delay(150); showDisclaimer = true
+
+        logoutEnabled = true
     }
 
     fun fadeSpec() = fadeIn(animationSpec = tween(durationMillis = 250))
@@ -208,20 +231,25 @@ fun MenuScreen(
             }
         }
         // Top-left Logout
-        SfxFAB(
-            audio = audioManager,
-            onClick = { showLogoutDialog = true },   // reuse your dialog
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .statusBarsPadding()
-                .padding(16.dp)
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.Logout,
-                contentDescription = "Logout"
-            )
-        }
+        AnimatedVisibility(visible = logoutEnabled, enter = fadeIn(tween(250))) {
 
+            SfxFAB(
+                audio = audioManager,
+                onClick = {
+                    if (!interactionsReady || !logoutEnabled) return@SfxFAB
+                    showLogoutDialog = true
+                },   // reuse your dialog
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                    contentDescription = "Logout"
+                )
+            }
+        }
         // Mute Button (Bottom RIGHT)
         SfxFAB(
             audio = audioManager,

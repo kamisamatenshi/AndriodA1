@@ -3,9 +3,12 @@ package com.koi.thepiece.scenemanagement
 import android.app.Application
 import android.util.Log
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavEntry
@@ -43,7 +46,7 @@ fun AppNavGraph(
 
     // For deck to use the shared view model for easier control
     val app = LocalContext.current.applicationContext as Application
-
+    var lastBackMs by remember { mutableLongStateOf(0L) }
     NavDisplay(
         backStack = backStack,
         entryProvider = { key ->
@@ -77,7 +80,11 @@ fun AppNavGraph(
 
                 Route.Catalog -> NavEntry(key) {
                     CatalogScreen(
-                        onBack = {
+                        onBack = let@{
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            if (now - lastBackMs < 350L) return@let // ignore rapid double press
+                            lastBackMs = now
+
                             if (backStack.size > 1) {
                                 backStack.removeAt(backStack.lastIndex)
                             }
@@ -105,7 +112,15 @@ fun AppNavGraph(
                         audioManager = audioManager,
                         imageLoader = imageLoader,
                         viewModel = scanViewModel,
-                        onBack = { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) },
+                        onBack = let@{
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            if (now - lastBackMs < 350L) return@let // ignore rapid double press
+                            lastBackMs = now
+
+                            if (backStack.size > 1) {
+                                backStack.removeAt(backStack.lastIndex)
+                            }
+                        },
                         onCodeDetected = { code ->
                             Log.d("OCRScanRoute", "Card code detected: $code")
                             // Optional: navigate to detail screen
@@ -117,7 +132,11 @@ fun AppNavGraph(
                 Route.Settings -> NavEntry(key) {
                     SettingsScreen(
                         audio = audioManager,
-                        onBack = {
+                        onBack = let@{
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            if (now - lastBackMs < 350L) return@let // ignore rapid double press
+                            lastBackMs = now
+
                             if (backStack.size > 1) {
                                 backStack.removeAt(backStack.lastIndex)
                             }
@@ -131,13 +150,20 @@ fun AppNavGraph(
                     val deckListVm: DeckListViewModel = viewModel(factory = DeckListViewModelFactory(app,context))
                     val deckVm: DeckViewModel = viewModel(factory = DeckViewModelFactory(app,context))
 
+                    deckListVm.refreshDecksFromServer()
                     DeckListScreen(
                         vm = deckListVm,
                         deckVm = deckVm,
                         audio = audioManager,
                         imageLoader = imageLoader,
-                        onBack = {
-                            if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                        onBack = let@{
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            if (now - lastBackMs < 350L) return@let // ignore rapid double press
+                            lastBackMs = now
+
+                            if (backStack.size > 1) {
+                                backStack.removeAt(backStack.lastIndex)
+                            }
                         },
                         onGoCreateNewDeck = { backStack.add(Route.DeckBuilderLeader) },
                         onOpenDeck = { deckId ->
@@ -153,8 +179,14 @@ fun AppNavGraph(
                     LeaderDeckBuildScreen(
                         vm = deckVm,
                         audio = audioManager,
-                        onBack = {
-                            if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                        onBack = let@{
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            if (now - lastBackMs < 350L) return@let // ignore rapid double press
+                            lastBackMs = now
+
+                            if (backStack.size > 1) {
+                                backStack.removeAt(backStack.lastIndex)
+                            }
                         },
                         imageLoader = imageLoader,
                         onGoCreateNewDeck = { leaderCard ->
@@ -170,8 +202,14 @@ fun AppNavGraph(
                     DeckCardBuildScreen(
                         vm = deckVm,
                         audio = audioManager,
-                        onBack = {
-                            if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+                        onBack = let@{
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            if (now - lastBackMs < 350L) return@let // ignore rapid double press
+                            lastBackMs = now
+
+                            if (backStack.size > 1) {
+                                backStack.removeAt(backStack.lastIndex)
+                            }
                         },
                         imageLoader = imageLoader
                     )

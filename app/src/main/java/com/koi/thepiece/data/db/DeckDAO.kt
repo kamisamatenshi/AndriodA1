@@ -44,4 +44,59 @@ interface DeckDao {
 
     @Query("DELETE FROM deck_cards WHERE deckId = :deckId")
     suspend fun deleteDeckCards(deckId: Long)
+
+    @Query("SELECT serverDeckId FROM decks WHERE deckId = :deckId")
+    suspend fun getServerDeckId(deckId: Long): Long?
+
+    @Query("SELECT * FROM decks WHERE serverDeckId = :serverDeckId LIMIT 1")
+    suspend fun getDeckByServerId(serverDeckId: Long): DeckEntity?
+
+    @Transaction
+    suspend fun upsertDeckByServerId(
+        serverDeckId: Long,
+        name: String,
+        leaderCardId: Int,
+        updatedAtEpochMs: Long,
+        shareCode : String?,
+        cards: List<Pair<Int, Int>> // cardId, qty
+    ) {
+        val existing = getDeckByServerId(serverDeckId)
+        val now = System.currentTimeMillis()
+
+        val localDeckId = if (existing == null) {
+            insertDeck(
+                DeckEntity(
+                    serverDeckId = serverDeckId,
+                    name = name,
+                    leaderCardId = leaderCardId,
+                    createdAtEpochMs = now,
+                    updatedAtEpochMs = updatedAtEpochMs
+                )
+            )
+        } else {
+            updateDeck(
+                existing.copy(
+                    name = name,
+                    leaderCardId = leaderCardId,
+                    updatedAtEpochMs = updatedAtEpochMs
+                )
+            )
+            existing.deckId
+        }
+
+        clearDeckCards(localDeckId)
+        insertDeckCards(cards.map { (cardId, qty) ->
+            DeckCardEntity(deckId = localDeckId, cardId = cardId, qty = qty)
+        })
+    }
+
+    @Query("""
+    DELETE FROM decks
+    WHERE serverDeckId IS NOT NULL
+      AND serverDeckId NOT IN (:serverIds)
+    """)
+    suspend fun deleteDecksNotInServer(serverIds: List<Long>)
+
+    @Query("DELETE FROM decks WHERE serverDeckId IS NOT NULL")
+    suspend fun deleteAllServerDecks()
 }

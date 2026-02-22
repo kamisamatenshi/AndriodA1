@@ -8,6 +8,7 @@ data class DeckEntity(
     @PrimaryKey(autoGenerate = true) val deckId: Long = 0L,
     val name: String,
     val leaderCardId: Int,              // <- associate leader here
+    val serverDeckId: Long? = null,
     val createdAtEpochMs: Long,
     val updatedAtEpochMs: Long
 )
