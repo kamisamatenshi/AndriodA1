@@ -15,12 +15,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -66,6 +69,7 @@ fun DeckPreviewDialog(
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
+    var tempQty by remember { mutableStateOf(1) }
 
     val state = rememberTransformableState { zoomChange, panChange, _ ->
         scale = (scale * zoomChange).coerceIn(1f, 4f)
@@ -143,6 +147,7 @@ fun DeckPreviewDialog(
                         )
                     }
                 }
+
                 Spacer(modifier = Modifier.weight(1f))
 
                 // Close
@@ -183,8 +188,7 @@ fun DeckPreviewDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 20.dp),
+                    .padding(bottom = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Image
@@ -199,7 +203,7 @@ fun DeckPreviewDialog(
                     imageLoader = imageLoader,
                     contentDescription = card.code ?: "Card",
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxWidth(0.78f)      // <-- controls actual layout size
                         .aspectRatio(0.69f)
                         .transformable(state)
                         .graphicsLayer(
@@ -220,7 +224,7 @@ fun DeckPreviewDialog(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 25.dp, max = 75.dp)
+                            .heightIn(min = 25.dp, max = 50.dp)
                             .border(1.dp, Color.Gray, MaterialTheme.shapes.small)
                     ) {
                         Column(
@@ -239,7 +243,7 @@ fun DeckPreviewDialog(
                         }
                     }
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(2.dp))
 
                 // Other Properties
                 Column(
@@ -324,16 +328,84 @@ fun DeckPreviewDialog(
                     }
                 }
 
-                Spacer(Modifier.height(20.dp))
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { onAddToDeck(card) }) {
-                            Text("Add to deck")
+                    // Quantity selector row
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+
+                        // Minus
+                        OverlayCircleButton(
+                            text = "−",
+                            enabled = tempQty > 1,
+                            onClick = { tempQty-- }
+                        )
+
+                        // Qty display
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            tonalElevation = 1.dp,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = tempQty.toString(),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
+
+                        // Plus
+                        OverlayCircleButton(
+                            text = "+",
+                            enabled = tempQty < 4,
+                            onClick = { tempQty++ }
+                        )
+
+
+                        // Add to deck button
+                        OutlinedButton(
+                            onClick = {
+                                repeat(tempQty) {
+                                    onAddToDeck(card)
+                                }
+                                tempQty = 1
+                                onDismiss()
+                            },
+                            modifier = Modifier.fillMaxWidth(0.7f)
+                        ) {
+                            Text("Add")
                         }
                     }
                 }
             }
         }
     )
+}
+
+@Composable
+fun OverlayCircleButton(
+    text: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = CircleShape,
+        tonalElevation = 2.dp,
+        modifier = Modifier.size(34.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(text = text, style = MaterialTheme.typography.titleMedium)
+        }
+    }
 }

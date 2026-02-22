@@ -88,11 +88,10 @@ fun DeckCardBuildScreen(
         vm.setColor("all")
         vm.setRarityFilter("all")
         vm.setCardType("all")
-
-        vm.clearDeck()
     }
 
-    var viewMode by rememberSaveable { mutableStateOf(DeckViewMode.GRID) }
+    var catalogViewMode by rememberSaveable { mutableStateOf(DeckViewMode.GRID) }
+    var deckViewMode by rememberSaveable { mutableStateOf(DeckViewMode.LIST) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
 
     val cards = remember(s.allCards, s.color , s.cardType , s.setFilter, s.rarityFilter, s.searchQuery, s.page, s.pageSize) {
@@ -143,11 +142,11 @@ fun DeckCardBuildScreen(
                 },
                 actions = {
                     IconButton(onClick = {
-                        viewMode =
-                            if (viewMode == DeckViewMode.GRID) DeckViewMode.LIST else DeckViewMode.GRID
+                        catalogViewMode =
+                            if (catalogViewMode == DeckViewMode.GRID) DeckViewMode.LIST else DeckViewMode.GRID
                     }) {
                         Icon(
-                            imageVector = if (viewMode == DeckViewMode.GRID) Icons.Filled.ViewList else Icons.Filled.GridView,
+                            imageVector = if (catalogViewMode == DeckViewMode.GRID) Icons.Filled.ViewList else Icons.Filled.GridView,
                             contentDescription = "Change view"
                         )
                     }
@@ -191,7 +190,7 @@ fun DeckCardBuildScreen(
 
                 Spacer(Modifier.height(6.dp))
 
-                when (viewMode) {
+                when (catalogViewMode) {
                     DeckViewMode.GRID -> {
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(5),
@@ -303,6 +302,16 @@ fun DeckCardBuildScreen(
                     ) {
                         Text(if (isEditing) "Update Deck" else "Save Deck")
                     }
+
+                    IconButton(onClick = {
+                        deckViewMode =
+                            if (deckViewMode == DeckViewMode.GRID) DeckViewMode.LIST else DeckViewMode.GRID
+                    }) {
+                        Icon(
+                            imageVector = if (deckViewMode == DeckViewMode.GRID) Icons.Filled.ViewList else Icons.Filled.GridView,
+                            contentDescription = "Change view"
+                        )
+                    }
                 }
 
                 TabRow(selectedTabIndex = selectedTab) {
@@ -323,7 +332,7 @@ fun DeckCardBuildScreen(
                         imageLoader = imageLoader,
                         card = leader
                     )
-                    1 -> CardsSection(state = s, vm = vm, viewMode = viewMode, imageLoader = imageLoader)
+                    1 -> CardsSection(state = s, vm = vm, viewMode = deckViewMode, imageLoader = imageLoader)
                 }
 
                 if (showSaveDialog) {
