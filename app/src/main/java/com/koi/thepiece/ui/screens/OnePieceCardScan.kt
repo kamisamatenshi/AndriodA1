@@ -89,6 +89,17 @@ data class CardEntry(
     var ownedQty: Int,
 )
 
+/**
+ * Builds the map key used to uniquely identify a [CardEntry] in the detected cards map.
+ *
+ * Format: `"CODE|VARIANT_NAME|CARD_ID"`, where CARD_ID is omitted when null
+ * (e.g. `"OP01-001|RARE|42"` or `"OP01-001|UNKNOWN|"`).
+ *
+ * @param code The card code (e.g. `"OP01-001"`).
+ * @param variant The card's [CardVariant].
+ * @param cardId The specific card ID when a printing has been selected, or null.
+ * @return A pipe-delimited string key.
+ */
 fun cardKey(code: String, variant: CardVariant, cardId: Int? = null) =
     "$code|${variant.name}|${cardId ?: ""}"
 
