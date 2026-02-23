@@ -356,13 +356,20 @@ class AudioManager(private val context: Context) {
     // =====================
     // ADDED: Play saved BGM on app start
     // =====================
-    fun playSelectedBgm(loop: Boolean = true) {
-        val id = _selectedBgmIdState.value
+    suspend fun playSelectedBgm(loop: Boolean = true) {
+        val id = readSavedBgmId()
         val track = availableBgmTracks.firstOrNull { it.id == id }
             ?: availableBgmTracks.first()
 
+        _selectedBgmIdState.value = track.id // keep UI in sync
         playBgm(track.resId, loop = loop)
         applyBgmVolume()
+    }
+
+    // Read saved BGM id directly from DataStore (source of truth)
+    private suspend fun readSavedBgmId(): String {
+        val prefs = context.dataStore.data.first()
+        return prefs[Keys.SELECTED_BGM_ID] ?: "default"
     }
 
     // ----------------------------
