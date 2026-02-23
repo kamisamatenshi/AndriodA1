@@ -118,7 +118,7 @@ fun CatalogScreen(
                 }
             )
         },
-        bottomBar = { if (totalNetWorth != null && vm != null) {
+        bottomBar = { if (totalNetWorth != null && vm != null) { // safe check
             CatalogFooter(
                 totalNetWorth = totalNetWorth.toDouble(),
                 isSgd = isSgd,
