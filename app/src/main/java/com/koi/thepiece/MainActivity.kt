@@ -20,6 +20,8 @@ import com.koi.thepiece.audio.AudioManager
 import com.koi.thepiece.core.image.AppImageLoader
 import com.koi.thepiece.scenemanagement.AppNavGraph
 import com.koi.thepiece.ui.theme.ThePieceTheme
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -57,9 +59,13 @@ class MainActivity : ComponentActivity() {
     }
     override fun onStart() {
         super.onStart()
-        //audio.playBgm(R.raw.bgm, loop = true) // or audio.resumeBgm()
-        // play whatever user selected
-        audio.playSelectedBgm(loop = true)
+        // Always read the saved id first, then play the right track
+        // lifecycleScope : This is a CoroutineScope tied to your Activity’s lifecycle
+        // The coroutine runs while the Activity is alive
+        // If the Activity is destroyed, the coroutine is automatically cancelled
+        lifecycleScope.launch {
+            audio.playSelectedBgm(loop = true)
+        }
     }
 
     override fun onResume() {
