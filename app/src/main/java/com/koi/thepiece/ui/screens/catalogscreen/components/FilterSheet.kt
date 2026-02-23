@@ -48,23 +48,49 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 
 
+/**
+ * Centralized styling configuration for the catalogue filter chips.
+ *
+ * The chip visuals are themed to resemble a One Piece-inspired "gold glow" style:
+ * - Selected chips use a gold container with sparkle shimmer and glow shadow.
+ * - Unselected chips use a softened surface variant background.
+ *
+ * Values are declared as mutable to allow future runtime tuning (optional),
+ * but in most cases these are treated as constants.
+ */
 object ChipStyle {
+    /** Base elevation for unselected chips. */
     var elevationUnselected = 2.dp
+
+    /** Elevated look for selected chips (also used for glow). */
     var elevationSelected = 10.dp
 
-    var textSelected = Color(0xFF1A1A1A) // dark text on gold
+    /** Text color when selected (dark text on gold). */
+    var textSelected = Color(0xFF1A1A1A)
+
+    /** Text color when unselected. */
     var textUnselected = Color(0xFF111111)
 
+    /** Optional override for selected chip container color (defaults to gold). */
     var selectedOverrideColor: Color? = null
+
+    /** Optional override for unselected chip container color (defaults to soft surface). */
     var unselectedOverrideColor: Color? = null
 
+    /** Border used for unselected chips to retain separation on light backgrounds. */
     var borderUnselected = BorderStroke(1.dp, Color(0x33000000))
 
-    // One Piece gold glow
+    /** One Piece-inspired gold tone. */
     var gold = Color(0xFFD6B15E)
 }
 
 
+/**
+ * Produces a softened unselected chip background color.
+ *
+ * The color is derived by interpolating between surfaceVariant and surface,
+ * reducing contrast and making chips look less "heavy" in the bottom sheet.
+ */
 @Composable
 private fun unselectedContainerColor(): Color {
     val base = MaterialTheme.colorScheme.surfaceVariant
@@ -73,6 +99,10 @@ private fun unselectedContainerColor(): Color {
     return lerp(base, bg, 0.55f)
 }
 
+/**
+ * Filter options for colour selection.
+ * "all" indicates no filtering on this category.
+ */
 val colorOptions = buildList {
     add("all")
 
@@ -80,16 +110,52 @@ val colorOptions = buildList {
     addAll(listOf("Red", "Green", "Blue", "Purple", "Black", "Yellow" ,"Mix"))
 }
 
+
+/**
+ * Filter options for card type selection.
+ * "all" indicates no filtering on this category.
+ */
 val typeOption = buildList {
     add("all")
 
     // Card Types
     addAll(listOf("Leader","Normal","Event", "Stage" , "Don"))
 }
+
+/**
+ * Filter options for rarity selection.
+ * Includes alternate-art variants (A-*) and common rarities.
+ */
 val rarityOption = buildList {
     addAll(listOf("all", "A-SEC", "SEC", "A-SR", "SR", "A-R", "R", "A-L", "L","SP","UC","C"))
 }
 
+/**
+ * Bottom sheet UI for catalogue filtering.
+ *
+ * Provides:
+ * - Set selection (grouped by OP/EB/PRB/ST with quick group tabs + horizontal set chips)
+ * - Color filtering
+ * - Card type filtering
+ * - Rarity filtering
+ *
+ * Interaction design:
+ * - Selecting a group (OP/EB/PRB/ST) updates the displayed list of set codes.
+ * - Selecting a set code calls onSetChange(setCode).
+ * - Clear resets all filters via onClear().
+ * - Done closes the bottom sheet via onDismiss().
+ *
+ * @param currentSet Currently selected set code (e.g., OP01, EB04) or "all".
+ * @param currentColor Currently selected color option or "all".
+ * @param currentRarity Currently selected rarity option or "all".
+ * @param currentType Currently selected card type option or "all".
+ * @param onSetChange Callback for set selection updates.
+ * @param onColorChange Callback for color filter updates.
+ * @param onCardTypeChange Callback for type filter updates.
+ * @param onRarityChange Callback for rarity filter updates.
+ * @param onClear Callback to reset filter state.
+ * @param onDismiss Callback to close the bottom sheet.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
  fun FilterBottomSheet(
@@ -106,7 +172,10 @@ val rarityOption = buildList {
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-
+    /**
+     * Set codes are grouped to avoid presenting a very long unstructured list.
+     * The group tabs control which list is shown in the horizontal LazyRow.
+     */
     val setGroups = mapOf(
         "all" to listOf("all"),
         "OP" to (1..14).map { "OP" + it.toString().padStart(2, '0') },
@@ -115,6 +184,9 @@ val rarityOption = buildList {
         "ST" to (1..29).map { "ST" + it.toString().padStart(2, '0') }
     )
 
+    /**
+     * Determines which group tab should be highlighted based on currentSet.
+     */
     val currentGroup = when {
         currentSet.equals("all", true) -> "all"
         currentSet.startsWith("OP", true) -> "OP"
@@ -135,7 +207,7 @@ val rarityOption = buildList {
             // Set filter
             FilterSectionTitle("Set")
 
-            // Category row
+            // Group selector (all / OP / EB / PRB / ST)
             FlowRowChips(
                 options = listOf("all", "OP", "EB", "PRB", "ST"),
                 selected = currentGroup,
@@ -194,7 +266,7 @@ val rarityOption = buildList {
             )
 
             Spacer(Modifier.height(16.dp))
-
+            // Bottom actions: clear filters and close
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -208,12 +280,28 @@ val rarityOption = buildList {
     }
 }
 
+/**
+ * Standard title block used for each filter category.
+ */
 @Composable
 private fun FilterSectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.labelLarge)
     Spacer(Modifier.height(6.dp))
 }
 
+/**
+ * FlowRow wrapper that renders a collection of selectable filter chips.
+ *
+ * Used for:
+ * - Group tabs (all/OP/EB/PRB/ST)
+ * - Colour filter options
+ * - Type filter options
+ * - Rarity filter options
+ *
+ * @param options List of chip labels.
+ * @param selected Currently selected label.
+ * @param onSelect Callback invoked when a chip is selected.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FlowRowChips(
@@ -238,6 +326,24 @@ private fun FlowRowChips(
     }
 }
 
+/**
+ * Customized filter chip styled to match One Piece themed UI.
+ *
+ * Selected-state enhancements:
+ * - Gold container colour
+ * - Glow shadow (gold-tinted)
+ * - Sparkle shimmer band animation across the chip surface
+ * - Higher elevation and subtle press scaling feedback
+ *
+ * Unselected-state:
+ * - Softer neutral container with border
+ *
+ * @param text Chip label.
+ * @param selected Whether this chip is currently selected.
+ * @param onClick Click callback for selection.
+ * @param modifier Optional modifier.
+ * @param shape Chip shape (rounded by default).
+ */
 @Composable
 private fun OPFilterChip(
     text: String,
@@ -249,9 +355,11 @@ private fun OPFilterChip(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
 
+    // Animate elevation between selected/unselected states
     val targetElevation = if (selected) ChipStyle.elevationSelected else ChipStyle.elevationUnselected
     val elevation by animateDpAsState(targetValue = targetElevation, label = "chipElevation")
 
+    // Press feedback: slight scale down on press
     val targetScale = if (pressed) 0.96f else 1f
     val scale by animateFloatAsState(targetValue = targetScale, label = "chipScale")
 
@@ -259,6 +367,7 @@ private fun OPFilterChip(
         ChipStyle.selectedOverrideColor ?: ChipStyle.gold.copy(alpha = 0.92f)
     val containerUnselected = ChipStyle.unselectedOverrideColor ?: unselectedContainerColor()
 
+    // Sparkle animation for selected chips
     val infinite = rememberInfiniteTransition(label = "sparkle")
 
     val bandWidthFrac = 0.28f
@@ -273,6 +382,10 @@ private fun OPFilterChip(
         label = "sparkleT"
     )
 
+    /**
+     * Sparkle overlay is only applied when chip is selected.
+     * A translucent diagonal highlight band is drawn across the chip.
+     */
     val sparkleModifier =
         if (selected) Modifier.drawWithContent {
             drawContent()
@@ -298,6 +411,10 @@ private fun OPFilterChip(
             drawRect(brush = brush)
         } else Modifier
 
+    /**
+     * Gold glow shadow applied only when selected.
+     * Uses the same elevation state for consistent visual intensity.
+     */
     val glowModifier =
         if (selected) Modifier.shadow(
             elevation = elevation,

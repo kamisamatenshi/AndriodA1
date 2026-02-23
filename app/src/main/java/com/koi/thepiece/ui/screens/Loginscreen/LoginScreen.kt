@@ -1,6 +1,5 @@
 package com.koi.thepiece.ui.screens.Loginscreen
 
-import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
@@ -11,7 +10,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -52,8 +50,35 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.platform.LocalContext
 
+/**
+ * Identifies which authentication panel is currently shown within the login screen.
+ * - BUTTONS: Shows initial Login / Register buttons and any session status messages.
+ * - LOGIN: Shows the login form panel.
+ * - REGISTER: Shows the register form panel.
+ */
 enum class AuthPanel { BUTTONS, LOGIN, REGISTER }
 
+/**
+ * Login and registration entry screen.
+ *
+ * Responsibilities:
+ * - Displays an animated landing view with an application logo and legal disclaimer.
+ * - Provides authentication UI:
+ *   - Session check / error messaging
+ *   - Login form
+ *   - Registration form
+ * - Coordinates navigation to the main menu after successful authentication.
+ * - Exposes quick-access toggles for:
+ *   - SFX mute/unmute
+ *   - Light/Dark theme mode
+ *
+ * State management:
+ * - UI state is driven by LoginViewModel.uiState.
+ * - Local UI effects (intro animation and mute state) are held as Compose states.
+ *
+ * Navigation:
+ * - Collects LoginViewModel.goNext; when emitted, triggers onGoToMainmenu().
+ */
 @Composable
 fun LoginScreen(
     audioManager: AudioManager,
@@ -64,22 +89,40 @@ fun LoginScreen(
     val context = LocalContext.current
     val viewModel: LoginViewModel = viewModel(factory = LoginViewModelFactory(context))
 
+    // UI-only local state
     var isMuted by remember { mutableStateOf(audioManager.isMuted()) }
     var showImage by remember { mutableStateOf(false) }
     var showDisclaimer by remember { mutableStateOf(false) }
 
+    /** Standard fade-in spec reused for intro elements. */
     fun fadeSpec() = fadeIn(animationSpec = tween(durationMillis = 250))
 
-    // ✅ separate effects: one for navigation, one for intro animation
+    /**
+     * Navigation effect:
+     * When ViewModel emits a navigation signal, transition to main menu.
+     */
     LaunchedEffect(Unit) {
         viewModel.goNext.collect { onGoToMainmenu() }
     }
+
+    /**
+     * Intro animation effect:
+     * Staggers the appearance of the main logo and disclaimer for a cleaner landing experience.
+     */
     LaunchedEffect(Unit) {
         delay(120); showImage = true
         delay(150); showDisclaimer = true
     }
 
+    /** Current ViewModel-driven UI state. */
     val state = viewModel.uiState.value
+
+    /**
+     * Determines which panel to display based on the ViewModel state.
+     * - ShowForm(Login) -> LOGIN
+     * - ShowForm(Register) -> REGISTER
+     * - Anything else -> BUTTONS
+     */
     val panel = when (state) {
         is LoginUiState.ShowForm -> when (state.mode) {
             AuthMode.LOGIN -> AuthPanel.LOGIN
@@ -95,11 +138,16 @@ fun LoginScreen(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            /**
+             * User input state.
+             * rememberSaveable preserves form values across configuration changes.
+             */
             var email by rememberSaveable { mutableStateOf("") }
             var password by rememberSaveable { mutableStateOf("") }
 
             Spacer(Modifier.weight(1f))
 
+            // Animated logo / hero image
             AnimatedVisibility(visible = showImage, enter = fadeSpec()) {
                 Image(
                     painter = painterResource(id = R.drawable.menucompass),
@@ -112,6 +160,11 @@ fun LoginScreen(
 
             Spacer(Modifier.height(18.dp))
 
+            /**
+             * Animated panel switcher:
+             * - BUTTONS <-> LOGIN/REGISTER transitions use slide + fade
+             * - Slide direction depends on whether transition is forward or back
+             */
             AnimatedContent(
                 targetState = panel,
                 transitionSpec = {
@@ -160,6 +213,10 @@ fun LoginScreen(
                         }
                     }
 
+                    /**
+                     * Login panel.
+                     * Allows the user to submit email and password for authentication.
+                     */
                     AuthPanel.LOGIN -> {
                         Column {
                             if (state is LoginUiState.Loading) {
@@ -200,6 +257,10 @@ fun LoginScreen(
                         }
                     }
 
+                    /**
+                     * Registration panel.
+                     * Allows the user to create an account using email and password.
+                     */
                     AuthPanel.REGISTER -> {
                         Column {
                             if (state is LoginUiState.Loading) {
@@ -244,6 +305,10 @@ fun LoginScreen(
 
             Spacer(Modifier.height(18.dp))
 
+            /**
+             * Legal disclaimer footer.
+             * Clarifies educational-only intent and IP ownership.
+             */
             AnimatedVisibility(visible = showDisclaimer, enter = fadeSpec()) {
                 Text(
                     text = "This application is developed solely for educational purposes. All art assets, characters, audio, and related intellectual property belong to Bandai Namco Entertainment Inc. This project is not affiliated with, endorsed by, or sponsored by Bandai Namco Entertainment Inc. No copyright infringement is intended.",
@@ -290,7 +355,11 @@ fun LoginScreen(
     }
 }
 
-
+/**
+ * Slide + fade animation used for panel transitions in AnimatedContent.
+ *
+ * @param forward True when navigating from BUTTONS to LOGIN/REGISTER, false when returning.
+ */
 private fun slideFade(forward: Boolean): ContentTransform {
     val dur = 220
     return if (forward) {

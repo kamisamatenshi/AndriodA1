@@ -36,7 +36,7 @@ import com.koi.thepiece.scanner.detector.Constants.MODEL_PATH
 /**
  * Screen: Scan
  * - Camera preview (PreviewView)
- * - Runs your existing Detector.detect(rotatedBitmap)
+ * - Runs existing Detector.detect(rotatedBitmap)
  * - Draws BoundingBox overlay aligned with PreviewView center-crop (FILL_CENTER)
  *
  * Requirements:
@@ -66,8 +66,8 @@ fun Scan(
     // Latest detection boxes
     val boxesState = remember { mutableStateOf<List<BoundingBox>>(emptyList()) }
 
-    // Size of the EXACT bitmap you feed to detector.detect(...)
-    // We need this to map normalized boxes -> preview coordinates correctly.
+    // Size of the EXACT bitmap feed to detector.detect(...)
+    //map normalized boxes -> preview coordinates correctly.
     val frameSizeState = remember { mutableStateOf(0 to 0) }
 
     // Detector listener
@@ -230,7 +230,7 @@ private fun bindCamera(
  * BoundingBox coords are normalized (0..1) relative to the *rotatedBitmap* passed to detector.detect().
  *
  * PreviewView uses center-crop when scaleType = FILL_CENTER.
- * So we apply the same center-crop transform when drawing:
+ * apply the same center-crop transform when drawing:
  *   view = image * scale + offset
  */
 @Composable

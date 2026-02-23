@@ -35,6 +35,30 @@ import com.koi.thepiece.ui.components.SfxFAB
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/**
+ * Main menu screen providing navigation entry points to the application's core features.
+ *
+ * Responsibilities:
+ * - Displays the menu hub for feature navigation:
+ *   - Deck list
+ *   - Catalog
+ *   - OCR card scanner (requires camera permission)
+ *   - Settings
+ * - Requests and displays camera permission status.
+ * - Provides global toggles:
+ *   - Mute/unmute SFX and BGM (via AudioManager)
+ *   - Light/Dark theme (callback controlled by parent)
+ * - Provides logout capability (dialog confirmation + token deletion).
+ *
+ * UX behaviors:
+ * - Staggered fade-in animation sequence for menu elements.
+ * - Back button triggers logout confirmation only after interactions are enabled.
+ * - Back presses are throttled to prevent repeated dialog spam.
+ *
+ * Security behavior:
+ * - Logout clears the locally stored session token (TokenStore) and triggers navigation
+ *   back to the login flow via onLogoutConfirmed().
+ */
 @Composable
 fun MenuScreen(
     audioManager: AudioManager,
@@ -47,28 +71,54 @@ fun MenuScreen(
     onLogoutConfirmed :()->Unit
 ) {
     val ctx = LocalContext.current
+
+    // Logout dialog / interaction state
     var showLogoutDialog by rememberSaveable  { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var logoutBusy by rememberSaveable { mutableStateOf(false) }
     var interactionsReady by remember { mutableStateOf(false) }
     var logoutEnabled by remember { mutableStateOf(false) }
+
+    // Back press throttling to prevent repeated toggles
     var backLocked by remember { mutableStateOf(false) }
 
+    /**
+     * Ensures UI has rendered at least one frame before allowing sensitive interactions.
+     * This prevents accidental immediate logout prompt when landing on the menu.
+     */
     LaunchedEffect(Unit) {
         kotlinx.coroutines.android.awaitFrame()
         interactionsReady = true
     }
+
+    /**
+     * Back press lock reset.
+     * This provides simple debouncing of the BackHandler.
+     */
     LaunchedEffect(backLocked) {
         if (backLocked) {
             delay(350)
             backLocked = false
         }
     }
+
+    /**
+     * Back button triggers logout confirmation when enabled.
+     * - Disabled while logout dialog is visible.
+     * - Throttled using backLocked.
+     */
     BackHandler(enabled = logoutEnabled && !showLogoutDialog) {
         if (backLocked) return@BackHandler
         backLocked = true
         showLogoutDialog = true
     }
+
+    /**
+     * Logout confirmation dialog.
+     * On confirm:
+     * - Clears the stored auth token from TokenStore.
+     * - Calls onLogoutConfirmed() for navigation reset (handled by parent/back stack).
+     */
     if (showLogoutDialog&&logoutEnabled) {
         AlertDialog(
             onDismissRequest = { if (!logoutBusy) showLogoutDialog = false },
@@ -97,8 +147,15 @@ fun MenuScreen(
         )
     }
 
+    // Mute state is mirrored locally for icon rendering
     var isMuted by remember { mutableStateOf(audioManager.isMuted()) }
 
+    /**
+     * Camera permission state.
+     * Used for:
+     * - Displaying status text
+     * - Blocking navigation to scanner until permission is granted
+     */
     var hasCamPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) ==
@@ -106,12 +163,20 @@ fun MenuScreen(
         )
     }
 
+    /**
+     * Permission launcher for camera access.
+     * Updates hasCamPermission once user responds to the permission prompt.
+     */
     val camPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCamPermission = granted
     }
 
+    /**
+     * Initial camera permission request.
+     * If permission is not granted yet, request it once on screen entry.
+     */
     LaunchedEffect(Unit) {
         if (!hasCamPermission) {
             camPermissionLauncher.launch(Manifest.permission.CAMERA)
@@ -129,6 +194,10 @@ fun MenuScreen(
     var showBtn4 by remember { mutableStateOf(false) }
     var showDisclaimer by remember { mutableStateOf(false) }
 
+    /**
+     * Staged animation sequence to reduce perceived UI clutter.
+     * logoutEnabled is only enabled at the end to avoid early dialog triggers.
+     */
     LaunchedEffect(Unit) {
         delay(120); showImage = true
         delay(120); showCamText = true
@@ -141,6 +210,7 @@ fun MenuScreen(
         logoutEnabled = true
     }
 
+    /** Standard fade-in spec reused for menu elements. */
     fun fadeSpec() = fadeIn(animationSpec = tween(durationMillis = 250))
 
     Box(modifier = Modifier.fillMaxSize()) {

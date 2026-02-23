@@ -31,9 +31,37 @@ import com.koi.thepiece.ui.screens.catalogscreen.components.FilterBottomSheet
 import com.koi.thepiece.ui.screens.catalogscreen.components.PagingRow
 import com.koi.thepiece.ui.screens.catalogscreen.components.SearchBarRow
 
-
+/**
+ * Catalogue view layout modes.
+ * - GRID: dense browsing experience for large card lists
+ * - LIST: readability-focused layout for scanning names and quick edits
+ */
 private enum class CatalogViewMode { GRID, LIST }
 
+/**
+ * Main catalogue screen.
+ *
+ * Responsibilities:
+ * - Provides browsing experience for card database with pagination
+ * - Supports grid/list view switching
+ * - Provides filter and search UI (set, color, rarity, type, query)
+ * - Displays set completion progress derived from owned quantities
+ * - Displays total net worth (JPY base, optional SGD view) computed from owned quantities and prices
+ * - Opens card detail dialog with zoom, skill display (JP/EN), metadata, price and quantity editing
+ *
+ * Architecture:
+ * - Uses CatalogViewModel as the single source of truth for catalogue UI state
+ * - Reads state as a StateFlow (vm.state) and renders UI reactively
+ * - Delegates all state mutations to ViewModel methods (e.g., setSetFilter, incrementQty)
+ *
+ * External dependencies:
+ * - ImageLoader is injected for consistent caching and rendering of card images
+ * - AudioManager is injected for UI feedback sounds (e.g., back button click)
+ *
+ * @param onBack Callback for navigation pop behavior.
+ * @param imageLoader Shared Coil ImageLoader instance.
+ * @param audio Audio manager used for click / UI feedback.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CatalogScreen(
@@ -42,18 +70,37 @@ fun CatalogScreen(
     audio: AudioManager
 )
  {
+     // ViewModel provisioning via factory (requires Application + Context)
     val context = LocalContext.current
     val app = LocalContext.current.applicationContext as Application
     val vm: CatalogViewModel = viewModel(factory = CatalogViewModelFactory(app,context))
+
+     /**
+      * Screen UI state:
+      * Contains full card list, active filters, paging, loading/error state, and current selection.
+      */
     val s by vm.state.collectAsState()
 
+     /**
+      * Initial set selection behavior:
+      * When entering the catalogue, if no set is selected (all), default to OP01.
+      * This ensures the completion indicator and paging are meaningful by default.
+      */
     LaunchedEffect(Unit) {
         if (s.setFilter == "all") vm.setSetFilter("OP01")
     }
 
+    //Local UI state for view mode and filter sheet visibility
     var viewMode by rememberSaveable { mutableStateOf(CatalogViewMode.GRID) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
 
+     /**
+      * Derived view data:
+      * - cards: paged + filtered cards for the current view
+      * - totalPages: total pages after applying filters/search
+      *
+      * remember(...) prevents re-running list computations unless inputs change.
+      */
     val cards = remember(s.allCards, s.color , s.cardType , s.setFilter, s.rarityFilter, s.searchQuery, s.page, s.pageSize) {
         vm.pagedCards(s)
     }
@@ -61,9 +108,17 @@ fun CatalogScreen(
         vm.totalPages(s)
     }
 
+     /**
+      * Net worth display state:
+      * totalNetWorth is treated as JPY source-of-truth and can be displayed as SGD via toggle.
+      */
      val totalNetWorth by vm.totalNetWorth.collectAsState(initial = 0)
      val isSgd by vm.isSgd.collectAsState(initial = false)
 
+     /**
+      * Filter bottom sheet overlay.
+      * Appears when showFilters is true and updates ViewModel filter state through callbacks.
+      */
     if (showFilters) {
         FilterBottomSheet(
             currentSet = s.setFilter,
@@ -84,6 +139,12 @@ fun CatalogScreen(
         )
     }
 
+     /**
+      * Scaffold structure:
+      * - TopAppBar: navigation back, view mode toggle, filter action
+      * - Bottom bar: net worth and currency toggle
+      * - Content: header (completion), search, paging, and grid/list of cards
+      */
     Scaffold(
         topBar = {
             TopAppBar(
@@ -118,6 +179,11 @@ fun CatalogScreen(
                 }
             )
         },
+        /**
+         * Bottom bar: total net worth display and currency toggle.
+         * The "safe check" is redundant because totalNetWorth is non-null and vm is always non-null,
+         * but kept as a defensive UI guard.
+         */
         bottomBar = { if (totalNetWorth != null && vm != null) { // safe check
             CatalogFooter(
                 totalNetWorth = totalNetWorth.toDouble(),
@@ -128,11 +194,21 @@ fun CatalogScreen(
         }
     ) { padding ->
 
+
+        /**
+         * Content column:
+         * - Header: set completion progress
+         * - Search bar with suggestions
+         * - Pagination controls
+         * - Card results displayed in grid or list mode
+         * - Card preview dialog when a card is selected
+         */
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Completion header based on selected set
             CatalogHeaderBlock(
                 setCode = s.setFilter,
                 loading = s.loading,
@@ -150,6 +226,7 @@ fun CatalogScreen(
                 onSuggestionClick = vm::selectSuggestion   // Called when suggestion clicked
             )
 
+            // Page navigation controls
             PagingRow(
                 page = s.page,
                 totalPages = totalPages,
@@ -159,6 +236,7 @@ fun CatalogScreen(
 
             Spacer(Modifier.height(6.dp))
 
+            // Main results view
             when (viewMode) {
                 CatalogViewMode.GRID -> {
                     LazyVerticalGrid(
@@ -202,6 +280,11 @@ fun CatalogScreen(
             }
         }
 
+        /**
+         * Card preview dialog:
+         * The selected card is identified by selectedID stored in UI state.
+         * When present, a dialog is shown allowing detailed view and quantity edits.
+         */
         val selectedCard = s.allCards.find { it.id == s.selectedID }
         if (selectedCard != null) {
             CardPreviewDialog(

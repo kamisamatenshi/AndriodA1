@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -35,9 +34,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -47,6 +44,27 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.Offset
 
+/**
+ * Grid tile UI for displaying a single card in catalogue grid view.
+ *
+ * Features:
+ * - Card artwork thumbnail rendered via Coil (with memory + disk cache enabled)
+ * - Owned quantity badge (QtyBadge) displayed on the top-right corner
+ * - Overlay +/- buttons for quick owned quantity adjustments
+ * - Clickable tile for opening card detail / preview dialog
+ *
+ * Price flow:
+ * - Observes price cache from CatalogViewModel (prices: Map<url, price>)
+ * - Triggers price fetch via LaunchedEffect when the yuyuUrl changes
+ * - Price value is computed but not displayed in this tile (used optionally by caller)
+ *
+ * @param card Domain card model used for UI rendering.
+ * @param imageLoader Shared Coil ImageLoader for consistent caching behavior.
+ * @param onClick Called when the tile is clicked (typically opens detail dialog).
+ * @param onPlus Called when the + overlay button is pressed.
+ * @param onMinus Called when the − overlay button is pressed.
+ * @param viewModel ViewModel used to fetch and cache prices keyed by marketplace URL.
+ */
 @Composable
 fun CardTileGrid(
     card: Card,
@@ -56,16 +74,39 @@ fun CardTileGrid(
     onMinus: () -> Unit,
     viewModel: CatalogViewModel
 ) {
-
+    /**
+     * Observes cached prices from ViewModel.
+     * Map structure: url -> priceInt
+     */
     val prices by viewModel.prices.collectAsState()
+
+    /**
+     * Marketplace URL used as the key for fetching and caching price.
+     */
     val url = card.yuyuUrl
 
+    /**
+     * Triggers a price fetch whenever the card URL changes.
+     * Price results are stored inside ViewModel state and can be shared across UI components.
+     *
+     * If fetchPrice2 handles null internally, this is safe.
+     * Otherwise, guard with `if (!url.isNullOrBlank())` before calling.
+     */
     LaunchedEffect(url) {
         viewModel.fetchPrice2(url)
     }
 
+    /**
+     * Resolved price for this card from the ViewModel cache.
+     * Null indicates price has not been fetched or URL is not available.
+     */
     val price = if (!url.isNullOrBlank()) prices[url] else null
 
+    /**
+     * Tile layout:
+     * - Image area with badge and overlay buttons
+     * - Card code label at bottom
+     */
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -74,11 +115,13 @@ fun CardTileGrid(
             .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
     ) {
+        // Image container (maintains consistent aspect ratio in grid)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(0.72f)
         ) {
+            // Card artwork thumbnail
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(card.imageUrl)
@@ -91,7 +134,7 @@ fun CardTileGrid(
                 contentDescription = card.code ?: "Card",
                 modifier = Modifier.fillMaxSize()
             )
-
+            // Owned quantity badge
             QtyBadge(
                 qty = card.ownedQty,
                 modifier = Modifier
@@ -99,7 +142,7 @@ fun CardTileGrid(
                     .padding(0.dp)
 
             )
-
+            // Overlay +/- buttons for quick quantity adjustment
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -112,8 +155,7 @@ fun CardTileGrid(
             }
         }
 
-
-
+        // Card code label
         Text(
             text = card.code.orEmpty().ifBlank { "-" },
             style = MaterialTheme.typography.labelSmall,
@@ -124,13 +166,30 @@ fun CardTileGrid(
     }
 }
 
-
+/**
+ * Displays a small circular badge representing owned card quantity.
+ *
+ * Visual rules:
+ * - qty >= 4: gold badge (highlighted as "playset / extra") with shimmer effect
+ * - qty > 0: green badge
+ * - qty == 0: red badge (not owned)
+ *
+ * Motion rules:
+ * - "Pop" animation triggers whenever qty changes (scale up then return)
+ * - Shimmer animation runs continuously only for the gold badge state
+ *
+ * @param qty Owned quantity to display.
+ * @param modifier Modifier to position/size the badge from the parent layout.
+ */
 @Composable
 fun QtyBadge(qty: Int, modifier: Modifier = Modifier) {
 
+    /**
+     * Gold state used as a visual emphasis when quantity indicates at least 4 copies.
+     */
     val isGold = qty >= 4
 
-    // Colors
+    // Badge colors and elevation based on quantity state.
     val backgroundColor: Color
     val contentColor: Color
     val elev: Dp
@@ -153,6 +212,9 @@ fun QtyBadge(qty: Int, modifier: Modifier = Modifier) {
         }
     }
 
+    /**
+     * Pop animation: provides feedback when quantity changes.
+     */
     val pop = remember { Animatable(1f) }
     LaunchedEffect(qty) {
 
@@ -162,6 +224,10 @@ fun QtyBadge(qty: Int, modifier: Modifier = Modifier) {
 
     }
 
+    /**
+     * Shimmer animation parameter used for gold state.
+     * Animates a moving highlight band across the badge.
+     */
     val shimmerT = rememberInfiniteTransition(label = "badgeShimmer")
         .animateFloat(
             initialValue = -0.5f,
@@ -173,6 +239,10 @@ fun QtyBadge(qty: Int, modifier: Modifier = Modifier) {
             label = "badgeShimmerT"
         ).value
 
+    /**
+     * Shimmer modifier is applied only when qty >= 4.
+     * Draws a translucent diagonal highlight band across the badge.
+     */
     val shimmerModifier =
         if (isGold) Modifier.drawWithContent {
             drawContent()
@@ -196,6 +266,10 @@ fun QtyBadge(qty: Int, modifier: Modifier = Modifier) {
             drawRect(brush = brush)
         } else Modifier
 
+    /**
+     * Surface is used to apply shape, color, and elevation consistently.
+     * graphicsLayer is used to apply pop scaling while keeping the badge circular.
+     */
     Box(
         modifier = modifier.size(22.dp), // badge size
         contentAlignment = Alignment.Center
@@ -222,6 +296,15 @@ fun QtyBadge(qty: Int, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/**
+ * Small circular overlay button used on top of the card image.
+ *
+ * Used for quick quantity adjustment actions inside CardTileGrid.
+ *
+ * @param text Label displayed inside the button (typically "+" or "−").
+ * @param onClick Callback invoked when the button is pressed.
+ */
 @Composable
 fun OverlayCircleButton(text: String, onClick: () -> Unit) {
     Surface(

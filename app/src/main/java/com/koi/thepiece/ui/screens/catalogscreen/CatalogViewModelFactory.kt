@@ -7,6 +7,17 @@ import androidx.lifecycle.ViewModelProvider
 import com.koi.thepiece.AppGraph
 import com.koi.thepiece.ui.screens.Loginscreen.LoginViewModel
 
+/**
+ * Factory for creating CatalogViewModel instances.
+ *
+ * Responsibilities:
+ * - Inject Application (required for AndroidViewModel)
+ * - Retrieve TokenStore from AppGraph
+ * - Construct CatalogViewModel with required dependencies
+ *
+ * This avoids direct dependency creation inside Composables
+ * and keeps ViewModel construction centralized.
+ */
 class CatalogViewModelFactory(
     private val app: Application,
     private val context: Context
@@ -15,6 +26,7 @@ class CatalogViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(CatalogViewModel::class.java)) {
+            // Dependency resolved through AppGraph (service locator pattern)
             val tokenStore = AppGraph.provideTokenStore(context)
             return CatalogViewModel(app , tokenStore) as T
         }
@@ -22,6 +34,16 @@ class CatalogViewModelFactory(
     }
 }
 
+/**
+ * Factory for creating LoginViewModel instances.
+ *
+ * Responsibilities:
+ * - Retrieve TokenStore dependency
+ * - Construct LoginViewModel with injected TokenStore
+ *
+ * LoginViewModel does not require Application context,
+ * so it extends ViewModel instead of AndroidViewModel.
+ */
 class LoginViewModelFactory(
     private val context: Context
 ) : ViewModelProvider.Factory {

@@ -16,7 +16,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -33,11 +32,24 @@ import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Scale
-import com.koi.thepiece.AppGraph.provideCatalogRepository
 import com.koi.thepiece.data.model.Card
-import com.koi.thepiece.data.repo.CatalogRepository
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
 
+/**
+ * Displays a detailed card preview dialog.
+ *
+ * Features provided by this dialog:
+ * - Card artwork preview with pinch-to-zoom and pan (transformable + graphicsLayer)
+ * - Skill text display with JP/EN toggle
+ * - Card metadata display (color, type, set, rarity, traits, obtain source)
+ * - Live price display fetched through ViewModel (cached by URL)
+ * - Owned quantity controls (+ / -) to update inventory
+ *
+ * Data flow:
+ * - The dialog receives a Card domain model for display.
+ * - Pricing is retrieved via CatalogViewModel and observed via StateFlow.
+ * - Owned quantity actions are delegated to the caller via onPlus/onMinus callbacks.
+ */
 @Composable
 fun CardPreviewDialog(
     card: Card,
@@ -47,29 +59,66 @@ fun CardPreviewDialog(
     onMinus: () -> Unit,
     viewModel: CatalogViewModel
 ) {
-
+    /**
+     * Observes cached price results from the ViewModel.
+     * Map structure: url -> price (Int)
+     */
     val prices by viewModel.prices.collectAsState()
+
+    /**
+     * Marketplace URL used as the price lookup key.
+     * If url is null/blank, price fetching is skipped.
+     */
     val url = card.yuyuUrl
 
+    /**
+     * Triggers a price fetch whenever the URL changes.
+     * LaunchedEffect ensures the call runs once per unique URL.
+     */
     LaunchedEffect(url) {
         viewModel.fetchPrice2(url)
     }
 
+    /**
+     * Looks up the latest fetched price for the card URL.
+     * If not available yet, price remains null and UI shows a loading label.
+     */
     val price = if (!url.isNullOrBlank()) prices[url] else null
+
+    // Zoom/pan state for card image preview.
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
 
+    /**
+     * Gesture state for pinch-to-zoom and panning.
+     * Zoom is clamped to avoid excessive scaling.
+     */
     val state = rememberTransformableState { zoomChange, panChange, _ ->
         scale = (scale * zoomChange).coerceIn(1f, 4f)
         offsetX += panChange.x
         offsetY += panChange.y
     }
 
+    /**
+     * Language toggle for skill text display.
+     * false => JP, true => EN
+     */
     var isEnglish by remember { mutableStateOf(false) }
 
+    /**
+     * AlertDialog layout:
+     * - title: card code (optional) and name
+     * - text: main content (image, skills, metadata, owned controls)
+     * - confirmButton: contains JP/EN toggle and close action
+     */
     AlertDialog(
         onDismissRequest = onDismiss,
+        /**
+         * Custom dialog footer row:
+         * - Language toggle (JP/EN)
+         * - Close button
+         */
         confirmButton = {
             Row(
                 modifier = Modifier
@@ -79,7 +128,7 @@ fun CardPreviewDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
 
-                // Lang
+                // Language toggle container (JP / EN)
                 Row(
                     modifier = Modifier
                         .border(
@@ -90,7 +139,7 @@ fun CardPreviewDialog(
                         .clip(RoundedCornerShape(8.dp))
                 ) {
 
-                    // JP
+                    // JP option
                     Box(
                         modifier = Modifier
                             .background(
@@ -113,7 +162,7 @@ fun CardPreviewDialog(
                         )
                     }
 
-                    // EN
+                    // EN option
                     Box(
                         modifier = Modifier
                             .background(
@@ -138,7 +187,7 @@ fun CardPreviewDialog(
                 }
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Close
+                // Close action
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier
@@ -154,6 +203,12 @@ fun CardPreviewDialog(
                 }
             }
         },
+
+        /**
+         * Title section:
+         * - Card code is shown when name differs from code (avoids duplicating for special cases)
+         * - Card name displayed as the main title
+         */
         title = {
             Column {
                 // Display Code if it is not DON card
@@ -172,6 +227,14 @@ fun CardPreviewDialog(
                 )
             }
         },
+        /**
+         * Main content:
+         * - Card image with zoom/pan
+         * - Skill text box with scroll + language toggle
+         * - Card metadata fields
+         * - Price display (JPY or converted SGD)
+         * - Owned quantity controls (+/-)
+         */
         text = {
             Column(
                 modifier = Modifier
@@ -180,7 +243,7 @@ fun CardPreviewDialog(
                     .padding(bottom = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Image
+                // Card artwork (cached via Coil policies)
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(card.imageUrl)
@@ -204,7 +267,7 @@ fun CardPreviewDialog(
                 )
                 Spacer(Modifier.height(10.dp))
 
-                // Skills
+                // Skill text (scrollable box)
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.Start
@@ -234,7 +297,7 @@ fun CardPreviewDialog(
                 }
                 Spacer(Modifier.height(12.dp))
 
-                // Other Properties
+                // Card metadata + price display
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -295,6 +358,12 @@ fun CardPreviewDialog(
                         }
                     }
 
+                    /**
+                     * Price display:
+                     * - Shows "Loading..." until price is retrieved
+                     * - JP mode shows JPY formatting
+                     * - EN mode converts to SGD using a fixed conversion ratio (JPY/SGD ~ 120)
+                     */
                     Row(
                         modifier = Modifier.fillMaxWidth(0.9f),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -319,6 +388,7 @@ fun CardPreviewDialog(
 
                 Spacer(Modifier.height(20.dp))
 
+                // Owned quantity controls (+ / -)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -331,6 +401,14 @@ fun CardPreviewDialog(
     )
 }
 
+/**
+ * Small outlined button used for quantity adjustments.
+ *
+ * Used in CardPreviewDialog for increment/decrement controls.
+ *
+ * @param text Button label (typically "+" or "-").
+ * @param onClick Click callback.
+ */
 @Composable
 private fun CreateOutlinedButton(
     text: String,

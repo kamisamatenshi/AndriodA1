@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,6 +31,25 @@ import coil.request.ImageRequest
 import coil.size.Scale
 import com.koi.thepiece.data.model.Card
 
+/**
+ * List-row UI for displaying a single card in catalogue list view.
+ *
+ * Features:
+ * - Thumbnail image rendered via Coil with disk + memory caching enabled
+ * - Owned quantity badge (QtyBadge) displayed on the thumbnail corner
+ * - Card name displayed as primary text
+ * - Compact +/- buttons for fast owned quantity adjustments
+ * - Entire row is clickable (typically opens the card detail / preview dialog)
+ *
+ * This component is designed for efficient scanning of many items while
+ * retaining quick inventory update controls.
+ *
+ * @param card Domain card model used for display.
+ * @param imageLoader Shared Coil ImageLoader for consistent caching behavior.
+ * @param onClick Called when the row is tapped (typically opens detail dialog).
+ * @param onPlus Called when the + button is pressed.
+ * @param onMinus Called when the − button is pressed.
+ */
 @Composable
 fun CardTileList(
     card: Card,
@@ -50,12 +68,16 @@ fun CardTileList(
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        /**
+         * Thumbnail container.
+         * aspectRatio keeps visual consistency across list rows.
+         */
         Box(
             modifier = Modifier
                 .width(56.dp)
                 .aspectRatio(0.72f)
         ) {
-
+            // Card thumbnail image
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(card.imageUrl)
@@ -70,7 +92,7 @@ fun CardTileList(
                     .matchParentSize()
                     .clip(RoundedCornerShape(8.dp))
             )
-
+            // Owned quantity badge overlay
             QtyBadge(
                 qty = card.ownedQty,
                 modifier = Modifier
@@ -80,11 +102,16 @@ fun CardTileList(
         }
 
         Spacer(Modifier.width(10.dp))
-
+        /**
+         * Card text section.
+         * weight(1f) ensures the title expands and the buttons stay aligned right.
+         */
         Column(Modifier.weight(1f)) {
             Text(card.name?: "-", style = MaterialTheme.typography.titleSmall)
         }
-
+        /**
+         * Compact quantity adjustment controls.
+         */
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             SmallCircleButton(text = "−", onClick = onMinus)
             SmallCircleButton(text = "+", onClick = onPlus)
@@ -92,7 +119,16 @@ fun CardTileList(
     }
 }
 
-
+/**
+ * Small circular button used for quantity adjustments in list rows.
+ *
+ * Compared to OverlayCircleButton (grid), this version is:
+ * - Smaller footprint for list density
+ * - Lower tonal elevation for subtle appearance
+ *
+ * @param text Button label (typically "+" or "−").
+ * @param onClick Click callback.
+ */
 @Composable
 private fun SmallCircleButton(text: String, onClick: () -> Unit) {
     Surface(
