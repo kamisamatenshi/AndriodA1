@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogViewModel
 import com.koi.thepiece.data.repo.SetCompletion
 import kotlin.math.roundToInt
-
+import androidx.compose.foundation.layout.navigationBarsPadding
 @Composable
 fun CatalogHeaderBlock(
     setCode: String,
@@ -209,7 +211,7 @@ fun CatalogFooter(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 15.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -229,7 +231,7 @@ fun CatalogFooter(
             }
 
             Text(
-                text = "Total net worth: $displayText",
+                text = "Total NetWorth: $displayText",
                 style = MaterialTheme.typography.titleMedium
             )
         }
@@ -243,7 +245,7 @@ private fun CreateOutlinedButton(
 ) {
     Box(
         modifier = Modifier
-            .size(width = 40.dp, height = 32.dp)
+            .size(width = 60.dp, height = 35.dp)
             .border(1.dp, MaterialTheme.colorScheme.onSurface, RoundedCornerShape(4.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
