@@ -66,6 +66,8 @@ fun DeckListScreen(
             backLocked = false
         }
     }
+    LaunchedEffect(Unit) { vm.refreshDecksFromServer() }
+    
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {

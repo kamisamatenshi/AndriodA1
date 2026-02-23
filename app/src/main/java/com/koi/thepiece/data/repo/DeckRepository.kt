@@ -13,32 +13,74 @@ import com.koi.thepiece.ui.screens.deckbuilderscreen.QtyClass
 import java.security.MessageDigest
 import android.util.Log
 import com.koi.thepiece.data.api.dto.DeckImportResponseDto
-import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-
+/**
+ * Repository responsible for deck persistence and server synchronization.
+ *
+ * Responsibilities:
+ * - Provide local deck read/observe APIs backed by Room (DeckDao)
+ * - Synchronize owned decks from server into local Room cache
+ * - Perform server-first mutations (create/update/delete) to ensure server is authoritative
+ * - Maintain a local shareCode map for quick UI display (serverDeckId -> shareCode)
+ *
+ * Note:
+ * This repository does not implement deck-building or rule validation logic.
+ * It only handles storage, retrieval, and server synchronization of decks.
+ */
 class DeckRepository(private val deckDao: DeckDao ,private val api: DeckApi) {
 
+    /**
+     * In-memory map of server deck IDs to share codes.
+     *
+     * Purpose:
+     * - Deck list UI often needs to show share code without fetching each deck again.
+     * - Updated whenever syncOwnedDecksFromServer() is called.
+     */
     private val _shareCodeMap = MutableStateFlow<Map<Long, String>>(emptyMap())
+
+    /** Public read-only StateFlow for share code display usage in UI. */
     val shareCodeMap = _shareCodeMap.asStateFlow()
 
+    /**
+     * Retrieves a deck (local Room) by local deck ID, including its card composition.
+     *
+     * @param deckId Local Room deckId.
+     * @return DeckWithCards if found, otherwise null.
+     */
     suspend fun getDeck(deckId: Long): DeckWithCards? = deckDao.getDeck(deckId)
 
+    /**
+     * Observes all local decks (Room) reactively for UI updates.
+     *
+     * @return Flow of decks ordered by updatedAtEpochMs (as defined in DAO query).
+     */
     fun observeAllDecks(): kotlinx.coroutines.flow.Flow<List<DeckWithCards>> {
         return deckDao.observeAllDecks()
     }
 
-
+    /**
+     * Synchronizes owned decks from the server into local Room storage.
+     *
+     * Workflow:
+     * 1) Fetch owned deck summaries from server (IDs + share codes)
+     * 2) For each server deck ID, fetch full deck detail and upsert into Room
+     * 3) Delete local server-synced decks that are no longer owned
+     *
+     * This ensures local cache reflects server-authoritative ownership.
+     *
+     * @param token Session token for authentication.
+     * @throws IllegalStateException if deck list endpoint fails.
+     */
     suspend fun syncOwnedDecksFromServer(token: String) {
-        // 1) get owned deck IDs
+        // 1) Fetch owned deck summaries (server IDs)
         val listResp = api.getOwnedDeckSummaries(token)
         if (!listResp.success || listResp.decks == null) {
             throw IllegalStateException("deck_list_owned failed: ${listResp.error ?: "unknown"}")
         }
 
-
+        // Build share-code map for quick UI access: serverDeckId -> shareCode
         val shareMap: Map<Long, String> = listResp.decks
             .mapNotNull { s -> s.shareCode?.let { code -> s.deckId to code } }
             .toMap()
@@ -47,20 +89,21 @@ class DeckRepository(private val deckDao: DeckDao ,private val api: DeckApi) {
 
         val serverIds = listResp.decks.map { it.deckId }
 
-        // 2) fetch each deck detail and upsert into Room
+        // 2) Fetch each deck detail and upsert into Room
         val now = System.currentTimeMillis()
 
 
         for (serverDeckId in serverIds) {
             val deckResp = api.getDeck(token, serverDeckId)
             if (!deckResp.success || deckResp.deck == null) {
-                // if server says not_owned/not_found, skip it
+                // If server returns not_owned/not_found, skip this deck safely
                 continue
             }
 
             val d = deckResp.deck
             val pairs = d.cards.map { it.cardId to it.qty }
 
+            // Upsert by server ID so local mapping remains stable across sync cycles
             deckDao.upsertDeckByServerId(
                 serverDeckId = d.deckId,
                 name = d.name,
@@ -71,13 +114,31 @@ class DeckRepository(private val deckDao: DeckDao ,private val api: DeckApi) {
             )
         }
 
-        // 3) remove local decks that are no longer owned
+        // 3) Cleanup: remove local decks that are no longer present on the server
         if (serverIds.isEmpty()) {
             deckDao.deleteAllServerDecks() // add DAO below
         } else {
             deckDao.deleteDecksNotInServer(serverIds)
         }
     }
+
+    /**
+     * Computes a stable hash of a deck based on canonicalized content.
+     *
+     * Purpose:
+     * - Detect identical decks across saves/updates
+     * - Allow server-side duplication checks (same composition)
+     *
+     * Canonical format:
+     * - Name is normalized (trim, single spaces, lowercase)
+     * - Card entries are sorted by cardId
+     * - Only requiredQty is included (stockQty is not part of composition)
+     *
+     * @param name Deck name.
+     * @param leaderCardId Leader card ID.
+     * @param deckMap Map of cardId -> QtyClass(requiredQty, stockQty).
+     * @return SHA-256 hash as 64-character hex string.
+     */
     fun computeDeckHash(
         name: String,
         leaderCardId: Int,
@@ -102,6 +163,22 @@ class DeckRepository(private val deckDao: DeckDao ,private val api: DeckApi) {
         return digest.joinToString("") { "%02x".format(it) } // 64-char hex
     }
 
+    /**
+     * Creates a new deck using a server-first strategy.
+     *
+     * Rationale:
+     * - Server is treated as the authoritative source of ownership and IDs.
+     * - Local Room cache mirrors the server state after successful creation.
+     *
+     * Workflow:
+     * 1) Convert deckMap to request DTO list
+     * 2) Compute deck hash
+     * 3) Call create endpoint (server)
+     * 4) Insert resulting deck locally with serverDeckId mapping
+     *
+     * @return Newly created local deckId (Room primary key).
+     * @throws IllegalStateException if server creation fails.
+     */
     suspend fun saveNewDeckServerFirst(
         token: String,
         name: String,
@@ -117,7 +194,7 @@ class DeckRepository(private val deckDao: DeckDao ,private val api: DeckApi) {
                 DeckCardReqDto(cardId = cardId, qty = qtyClass.requiredQty)
             }
 
-        // 2) Compute hash (name changes => new deck, as you wanted)
+        // 2) Compute hash
         val deckHash = computeDeckHash(name, leaderCardId, deckMap)
 
         // 3) Call server FIRST
@@ -156,6 +233,18 @@ class DeckRepository(private val deckDao: DeckDao ,private val api: DeckApi) {
         return localDeckId
     }
 
+    /**
+     * Updates an existing deck using a server-first strategy.
+     *
+     * Behavior:
+     * - Server is updated first using the serverDeckId linked to the local deck.
+     * - If server reports "no changes" (same hash), local storage is not modified.
+     * - If changed, a new local deck entry is created (old deck preserved).
+     *
+     * @param deckId Local deckId to update from.
+     * @return New local deckId if a new deck is created, or null if no change.
+     * @throws IllegalStateException if local deck has no serverDeckId or server update fails.
+     */
     suspend fun overwriteExistingDeckServerFirst(
         token: String,
         deckId: Long,                      // local deckId (old deck)
@@ -224,6 +313,17 @@ class DeckRepository(private val deckDao: DeckDao ,private val api: DeckApi) {
 
         return newLocalDeckId
     }
+
+    /**
+     * Deletes a deck using a server-first strategy.
+     *
+     * Workflow:
+     * 1) Resolve serverDeckId from local deckId
+     * 2) Call server delete endpoint (ownership removal)
+     * 3) Remove local deck and associated deck_cards
+     *
+     * @throws IllegalStateException if deck is not linked to server or server call fails.
+     */
     suspend fun deleteDeckServerFirst(
         token: String,
         deckId: Long // local deckId
@@ -244,15 +344,27 @@ class DeckRepository(private val deckDao: DeckDao ,private val api: DeckApi) {
             throw IllegalStateException("Server deleteDeck failed: ${resp.error ?: "unknown"}")
         }
 
-        // Optional: if removed == false, means server says you didn't own it anymore.
-        // You can still delete locally to match "no longer visible".
-        // if (resp.removed == false) { ... }
-
-        // 3) Delete locally
+        // Remove locally to match server-owned list visibility
         deckDao.clearDeckCards(deckId)
         deckDao.deleteDeck(deckId)
     }
 
+    /**
+     * Imports a deck using a share code.
+     *
+     * Server responsibilities:
+     * - Validate session token
+     * - Resolve share code to a deck record
+     * - Add deck to user's owned list if allowed
+     *
+     * This call returns the server response. Local caching can be done by caller,
+     * or via syncOwnedDecksFromServer() after import.
+     *
+     * @param token Session token.
+     * @param shareCode User-entered share code (trimmed).
+     * @return DeckImportResponseDto containing status and optional imported deck data.
+     * @throws IllegalStateException if import fails.
+     */
     suspend fun importDeckByShareCode(token: String, shareCode: String): DeckImportResponseDto {
         val resp = api.importDeckByShareCode(token, shareCode.trim())
         if (!resp.success) throw IllegalStateException(resp.error ?: "import_failed")
