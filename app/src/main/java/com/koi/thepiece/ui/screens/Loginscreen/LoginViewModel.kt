@@ -12,6 +12,7 @@ import com.koi.thepiece.data.api.dto.RegisterBody
 import com.koi.thepiece.data.local.TokenStore
 import kotlinx.coroutines.flow.firstOrNull
 import okio.IOException
+import org.json.JSONObject
 import retrofit2.HttpException
 
 class LoginViewModel(private val tokenStore: TokenStore) : ViewModel() {
@@ -133,8 +134,15 @@ class LoginViewModel(private val tokenStore: TokenStore) : ViewModel() {
                         _uiState.value = LoginUiState.Error(res.message ?: "Register failed")
                     }
                 }
-                .onFailure {
-                    _uiState.value = LoginUiState.Error("Network error")
+                .onFailure { t ->
+                    val msg = if (t is HttpException) {
+                        val raw = t.response()?.errorBody()?.string()
+                        raw?.let {
+                            runCatching { JSONObject(it).optString("message") }.getOrNull()
+                        }?.takeIf { it.isNotBlank() }
+                    } else null
+
+                    _uiState.value = LoginUiState.Error(msg ?: t.message ?: "Register failed")
                 }
         }
     }
