@@ -60,18 +60,40 @@ class LoginViewModel(private val tokenStore: TokenStore) : ViewModel() {
                 }
         }
     }
+    
+    private fun validateEmail(email: String): String? {
+        val trimmed = email.trim()
+        if (trimmed.isBlank()) return "Email is required"
+
+        val emailRegex = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
+        if (!emailRegex.matches(trimmed)) return "Invalid email format"
+
+        return null
+    }
+
+    private fun validatePassword(password: String): String? {
+        if (password.isBlank()) return "Password is required"
+        if (password.length < 8) return "Password must be at least 8 characters"
+
+        return null
+    }
+
+    private fun validateCredentials(email: String, password: String): String? {
+        return validateEmail(email) ?: validatePassword(password)
+    }
 
     fun submitLogin(email: String, password: String) {
 
-        if (email.isBlank() || password.isBlank()) {
-            _uiState.value = LoginUiState.Error("Email and password required")
+        val validationError = validateCredentials(email, password)
+        if (validationError != null) {
+            _uiState.value = LoginUiState.Error(validationError)
             return
         }
 
         _uiState.value = LoginUiState.Loading
 
         viewModelScope.launch {
-            runCatching { authApi.login(LoginBody(email, password)) }
+            runCatching { authApi.login(LoginBody(email.trim(), password)) }
                 .onSuccess { res ->
 
                     if (res.success && !res.token.isNullOrBlank()) {
@@ -115,26 +137,61 @@ class LoginViewModel(private val tokenStore: TokenStore) : ViewModel() {
                 }
         }
     }
+
     fun submitRegister(email: String, password: String) {
-        if (email.isBlank() || password.isBlank()) {
-            _uiState.value = LoginUiState.Error("Email and password required")
+
+        val validationError = validateCredentials(email, password)
+        if (validationError != null) {
+            _uiState.value = LoginUiState.Error(validationError)
             return
         }
 
         _uiState.value = LoginUiState.Loading
 
         viewModelScope.launch {
-            runCatching { authApi.register(RegisterBody(email, password)) }
+            runCatching { authApi.register(RegisterBody(email.trim(), password)) }
                 .onSuccess { res ->
                     if (res.success) {
                         // After register, auto-login
                         submitLogin(email, password)
                     } else {
-                        _uiState.value = LoginUiState.Error(res.message ?: "Register failed")
+                        _uiState.value =
+                            LoginUiState.Error(res.message ?: "Register failed")
                     }
                 }
-                .onFailure {
-                    _uiState.value = LoginUiState.Error("Network error")
+                .onFailure { throwable ->
+
+                    when (throwable) {
+
+                        is HttpException -> {
+                            when (throwable.code()) {
+
+                                //Suppose to have this error when same email/username
+                                409 -> _uiState.value =
+                                    LoginUiState.Error("An account with this email already exists")
+
+                                //Bad Request
+                                400 -> _uiState.value =
+                                    LoginUiState.Error("Invalid email or password")
+
+                                500 -> _uiState.value =
+                                    LoginUiState.Error("Server error. Please try again.")
+
+                                else -> _uiState.value =
+                                    LoginUiState.Error("Register failed")
+                            }
+                        }
+
+                        is IOException -> {
+                            _uiState.value =
+                                LoginUiState.Error("No internet connection")
+                        }
+
+                        else -> {
+                            _uiState.value =
+                                LoginUiState.Error("Unexpected error occurred")
+                        }
+                    }
                 }
         }
     }
