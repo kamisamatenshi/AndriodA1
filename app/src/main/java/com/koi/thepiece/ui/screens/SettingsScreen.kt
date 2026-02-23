@@ -10,6 +10,7 @@ import com.koi.thepiece.audio.AudioManager
 import com.koi.thepiece.ui.components.SfxButton
 import kotlin.math.roundToInt
 import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.ExperimentalMaterial3Api
 
 @Composable
 fun SettingsScreen(
@@ -21,6 +22,19 @@ fun SettingsScreen(
     val bgm by audio.bgmState.collectAsState()
     val sfx by audio.sfxState.collectAsState()
 
+    // =====================
+    // Observe selected BGM
+    // =====================
+    val selectedBgmId by audio.selectedBgmIdState.collectAsState()
+
+    // Get available tracks
+    val tracks = remember { audio.getBgmTracks() }
+
+    // Get title of selected track
+    val selectedTitle = tracks.firstOrNull { it.id == selectedBgmId }?.title
+        ?: tracks.firstOrNull()?.title
+        ?: "Unknown"
+
     Box(modifier = Modifier.fillMaxSize()) {
 
         Column(
@@ -31,6 +45,18 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Text("Settings", style = MaterialTheme.typography.titleLarge)
+
+            // =====================
+            // BGM dropdown selector
+            // =====================
+            BgmPicker(
+                title = "Background Music",
+                selectedTitle = selectedTitle,
+                tracks = tracks,
+                onSelect = { id ->
+                    audio.setSelectedBgm(id, loop = true)
+                }
+            )
 
             VolumeSlider(
                 title = "Master Volume",
@@ -61,6 +87,54 @@ fun SettingsScreen(
                 .padding(16.dp)
         ) {
             Text("Back")
+        }
+    }
+}
+
+// =====================
+// BGM dropdown UI component
+// =====================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BgmPicker(
+    title: String,
+    selectedTitle: String,
+    tracks: List<AudioManager.BgmTrack>,
+    onSelect: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded }
+        ) {
+            OutlinedTextField(
+                value = selectedTitle,
+                onValueChange = {},
+                readOnly = true,
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth(),
+                label = { Text("Select track") }
+            )
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                tracks.forEach { t ->
+                    DropdownMenuItem(
+                        text = { Text(t.title) },
+                        onClick = {
+                            expanded = false
+                            onSelect(t.id)
+                        }
+                    )
+                }
+            }
         }
     }
 }

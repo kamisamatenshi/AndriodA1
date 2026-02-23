@@ -57,7 +57,9 @@ class MainActivity : ComponentActivity() {
     }
     override fun onStart() {
         super.onStart()
-        audio.playBgm(R.raw.bgm, loop = true) // or audio.resumeBgm()
+        //audio.playBgm(R.raw.bgm, loop = true) // or audio.resumeBgm()
+        // play whatever user selected
+        audio.playSelectedBgm(loop = true)
     }
 
     override fun onResume() {
