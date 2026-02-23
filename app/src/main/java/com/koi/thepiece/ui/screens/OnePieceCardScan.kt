@@ -89,11 +89,36 @@ data class CardEntry(
     var ownedQty: Int,
 )
 
+/**
+ * Builds the map key used to uniquely identify a [CardEntry] in the detected cards map.
+ *
+ * Format: `"CODE|VARIANT_NAME|CARD_ID"`, where CARD_ID is omitted when null
+ * (e.g. `"OP01-001|RARE|42"` or `"OP01-001|UNKNOWN|"`).
+ *
+ * @param code The card code (e.g. `"OP01-001"`).
+ * @param variant The card's [CardVariant].
+ * @param cardId The specific card ID when a printing has been selected, or null.
+ * @return A pipe-delimited string key.
+ */
 fun cardKey(code: String, variant: CardVariant, cardId: Int? = null) =
     "$code|${variant.name}|${cardId ?: ""}"
 
 // ─── OCR helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Extracts and normalizes a card code from raw OCR or user-entered text.
+ *
+ * Expected format: `XX00-000` where the first two characters are letters (A–Z or 0/O),
+ * followed by two alphanumeric digits, a dash, and three digits.
+ *
+ * Normalization applied:
+ * - Em dashes (–) are replaced with hyphens (-)
+ * - The 2-character prefix has digits coerced to 'O' (e.g. `AB0C` → `ABOC`)
+ * - The numeric suffix has 'O' characters coerced to '0' (e.g. `O1O` → `010`)
+ *
+ * @param rawText The raw input string to search within.
+ * @return The first matching and normalized card code, or `null` if none is found.
+ */
 fun extractCardCode(rawText: String): String? {
     val codeRegex = Regex("""[A-Z][A-Z0-9][0-9O]{2}[-–][0-9O]{3}""")
     return codeRegex.find(rawText)?.value
@@ -107,6 +132,19 @@ fun extractCardCode(rawText: String): String? {
         }
 }
 
+/**
+ * Crops the horizontal center strip of a bitmap, targeting the region most likely
+ * to contain a card code in a typical card scan or photo.
+ *
+ * The crop region is defined as a fixed proportion of the bitmap dimensions:
+ * - Horizontally: the middle 80%, skipping 10% on each side
+ * - Vertically:   the middle 30%, starting at 35% from the top
+ *
+ * All coordinates are clamped to valid bitmap bounds before cropping.
+ *
+ * @param bitmap The source bitmap to crop. Not recycled or modified.
+ * @return A new bitmap representing the cropped center strip.
+ */
 fun cropCenterStrip(bitmap: Bitmap): Bitmap {
     val cropLeft   = (bitmap.width  * 0.10f).toInt()
     val cropWidth  = (bitmap.width  * 0.80f).toInt()
@@ -119,12 +157,34 @@ fun cropCenterStrip(bitmap: Bitmap): Bitmap {
     return Bitmap.createBitmap(bitmap, safeLeft, safeTop, safeWidth, safeHeight)
 }
 
+/**
+ * Upscales a bitmap by 2.5x to improve OCR accuracy on small or low-resolution images.
+ *
+ * Scaling is applied via a [Matrix] with bilinear filtering enabled, which produces
+ * smoother edges compared to nearest-neighbour scaling.
+ *
+ * @param src The source bitmap to scale. Not recycled or modified.
+ * @return A new bitmap scaled to 2.5x the original dimensions.
+ */
 fun preprocessBitmap(src: Bitmap): Bitmap {
     val scale = 2.5f
     val matrix = Matrix().apply { postScale(scale, scale) }
     return Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
 }
 
+/**
+ * Converts this [ImageProxy] to a correctly-oriented [Bitmap].
+ *
+ * Assumes the image is in RGBA_8888 format (e.g. as produced by CameraX ImageAnalysis
+ * with [androidx.camera.core.ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888]).
+ * Using a different format will produce corrupted pixel data.
+ *
+ * Rotation metadata from [ImageInfo.rotationDegrees] is applied so the returned
+ * bitmap is upright regardless of device orientation at capture time.
+ *
+ * @receiver An [ImageProxy] with at least one plane containing raw pixel data.
+ * @return A new upright [Bitmap] in ARGB_8888 format.
+ */
 fun ImageProxy.toBitmap(): Bitmap {
     val buffer: ByteBuffer = planes[0].buffer
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -135,6 +195,18 @@ fun ImageProxy.toBitmap(): Bitmap {
 
 // ─── Camera helpers ───────────────────────────────────────────────────────────
 
+/**
+ * Triggers continuous autofocus and auto-exposure metering at the center of the preview.
+ *
+ * Initiates a [FocusMeteringAction] targeting the center point (0.5, 0.5) of the
+ * [PreviewView], with both AF and AE flags set. The action auto-cancels after 3 seconds,
+ * after which the camera returns to its default continuous-focus behavior.
+ *
+ * Does nothing if [cameraControl] is null.
+ *
+ * @param cameraControl The [CameraControl] instance for the active camera session, or null.
+ * @param previewView The [PreviewView] used to derive the metering point coordinate space.
+ */
 fun triggerContinuousAutofocus(cameraControl: CameraControl?, previewView: PreviewView) {
     cameraControl ?: return
     val meteringPoint = previewView.meteringPointFactory.createPoint(0.5f, 0.5f)
@@ -149,14 +221,46 @@ fun triggerContinuousAutofocus(cameraControl: CameraControl?, previewView: Previ
 
 // ─── Card list helpers ────────────────────────────────────────────────────────
 
+/**
+ * Returns all cards whose code matches [code], case-insensitively.
+ *
+ * @param code The card code to search for.
+ * @param allCards The pool of cards to search within.
+ * @return A list of matching cards, or an empty list if none are found.
+ */
 fun matchingCards(code: String, allCards: List<Card>): List<Card> =
     allCards.filter { it.code.equals(code, ignoreCase = true) }
 
+/**
+ * Returns the subset of known [CardVariant]s represented in the given list of cards,
+ * ordered by their declaration order in [CardVariant.entries].
+ *
+ * [CardVariant.UNKNOWN] is always excluded from the result, even if present in the list.
+ *
+ * @param cards The cards to derive available variants from.
+ * @return A filtered, ordered list of [CardVariant]s with no duplicates.
+ */
 fun availableVariantsFor(cards: List<Card>): List<CardVariant> {
     val present = cards.mapNotNull { CardVariant.fromRarity(it.rarity) }.toSet()
     return CardVariant.entries.filter { it != CardVariant.UNKNOWN && it in present }
 }
 
+/**
+ * Resolves a [CardEntry] to a specific [Card] from a pre-filtered candidate list,
+ * and updates [CardEntry.ownedQty] as a side effect.
+ *
+ * Resolution priority:
+ * 1. If [CardEntry.selectedCardId] is set, match by ID.
+ * 2. If the variant is [CardVariant.UNKNOWN], fall back to the first candidate.
+ * 3. Otherwise, match by variant via [CardVariant.fromRarity].
+ *
+ * [CardEntry.ownedQty] is set to 0 for [CardVariant.UNKNOWN] entries, or to the
+ * resolved card's owned quantity if found, or 0 if resolution failed.
+ *
+ * @param entry The card entry to resolve. [CardEntry.ownedQty] will be mutated.
+ * @param cards A pre-filtered list of candidate cards (e.g. matching by code).
+ * @return The resolved [Card], or `null` if no match was found.
+ */
 fun resolveCardEntity(entry: CardEntry, cards: List<Card>): Card? {
 
     val resolved = when {
@@ -179,6 +283,22 @@ fun resolveCardEntity(entry: CardEntry, cards: List<Card>): Card? {
     return resolved
 }
 
+/**
+ * Applies a variant selection to the detected cards map, re-keying the entry from
+ * [oldKey] to [newKey] and merging quantities if an entry already exists at [newKey].
+ *
+ * If [newKey] is already present, the existing entry is preserved and [entry]'s
+ * quantity is added to it. Otherwise, [entry] is inserted with [variant] and
+ * [cardId] applied.
+ *
+ * @param detectedCards The current state of detected cards. Not modified.
+ * @param oldKey The key of the entry being replaced.
+ * @param newKey The key the resolved entry should be stored under.
+ * @param entry The card entry being updated.
+ * @param variant The newly selected [CardVariant] to apply if no merge occurs.
+ * @param cardId The selected card ID to apply if no merge occurs.
+ * @return A new [LinkedHashMap] reflecting the variant selection, preserving insertion order.
+ */
 fun applyVariantSelection(
     detectedCards: LinkedHashMap<String, CardEntry>,
     oldKey: String,
@@ -200,6 +320,25 @@ fun applyVariantSelection(
 
 // ─── Composables ─────────────────────────────────────────────────────────────
 
+/**
+ * A selectable tile displaying a card's art, used for choosing between variant printings.
+ *
+ * Renders the card image at a fixed 90dp width with a standard card aspect ratio (0.72).
+ * A highlighted border is shown when [isSelected] is true. If [showAltLabel] is true,
+ * an "Alt N" label is shown below the image, useful for distinguishing multiple alternate
+ * art variants of the same card.
+ *
+ * Images are loaded via [imageLoader] with both memory and disk caching enabled.
+ *
+ * @param card The card whose art and image URL are displayed.
+ * @param isSelected Whether this tile is the currently selected variant.
+ * @param altIndex The 1-based index shown in the alt label (e.g. "Alt 2").
+ * @param showAltLabel Whether to show the "Alt N" label below the image.
+ * @param imageLoader The [ImageLoader] instance used for async image loading.
+ * @param colorPrimary Accent colour applied to the border and label when selected.
+ * @param colorOnSurfaceVariant Muted colour applied to the border and label when unselected.
+ * @param onClick Called when the tile is tapped.
+ */
 @Composable
 private fun VariantArtTile(
     card: Card,
@@ -253,6 +392,29 @@ private fun VariantArtTile(
     }
 }
 
+/**
+ * Displays a labeled, horizontally scrollable row of [VariantArtTile]s for a single
+ * [CardVariant], allowing the user to select a specific printing.
+ *
+ * The variant label is highlighted with [colorPrimary] when [variant] matches the
+ * currently selected variant in [entry], and muted otherwise.
+ *
+ * A tile is considered selected if [variant] matches [entry.variant] and either:
+ * - The tile's card ID matches [entry.selectedCardId], or
+ * - No card ID is explicitly selected and the tile is the first in the row.
+ *
+ * Alt labels ("Alt 1", "Alt 2", …) are shown below tiles only when there are
+ * multiple cards in [variantCards].
+ *
+ * @param variant The card variant this section represents.
+ * @param variantCards The list of cards belonging to this variant (alternate printings).
+ * @param entry The current [CardEntry] used to determine the active selection.
+ * @param imageLoader The [ImageLoader] instance passed through to each [VariantArtTile].
+ * @param colorPrimary Accent colour used for the active variant label and selected tile border.
+ * @param colorOnSurface Base content colour (currently unused directly but passed for consistency).
+ * @param colorOnSurfaceVariant Muted colour used for inactive labels and tile borders.
+ * @param onSelect Called with the tapped [Card] when the user selects a tile.
+ */
 @Composable
 private fun VariantSection(
     variant: CardVariant,
@@ -295,6 +457,26 @@ private fun VariantSection(
     }
 }
 
+/**
+ * A dialog that lets the user pick a specific variant and printing for a scanned card.
+ *
+ * Renders a vertically scrollable list of [VariantSection]s, one per entry in
+ * [availableVariants]. Each section receives the subset of [allMatchingCards] that
+ * belong to that variant, filtered by [CardVariant.fromRarity].
+ *
+ * Dismissed by tapping outside the dialog or via [onDismiss].
+ *
+ * @param entry The [CardEntry] representing the current selection state.
+ * @param allMatchingCards All cards matching the scanned code, across all variants.
+ * @param availableVariants The ordered list of variants to display, typically derived
+ * from [availableVariantsFor].
+ * @param imageLoader The [ImageLoader] instance passed through to each [VariantSection].
+ * @param colorPrimary Accent colour forwarded to [VariantSection] for active selections.
+ * @param colorOnSurface Base content colour forwarded to [VariantSection].
+ * @param colorOnSurfaceVariant Muted colour forwarded to [VariantSection] for inactive elements.
+ * @param onDismiss Called when the dialog is dismissed without a selection.
+ * @param onSelect Called with the chosen [CardVariant] and [Card] when the user taps a tile.
+ */
 @Composable
 private fun VariantPickerDialog(
     entry: CardEntry,
@@ -346,10 +528,34 @@ private fun VariantPickerDialog(
 }
 
 /**
- * A single row in the scanned-card list.
- * Price is fetched via fetchPrice2 using the first matching card's yuyuUrl,
- * exactly mirroring how CardTileGrid fetches it — so the result is already
- * cached in the ViewModel's prices map if the catalog was visited first.
+ * A single row in the scanned card list, displaying a card's thumbnail, code, rarity,
+ * price, quantity, and +/− controls.
+ *
+ * Tapping the rarity badge opens a [VariantPickerDialog]. Selecting a variant re-keys
+ * the entry in [currentDetectedCards] via [applyVariantSelection] and notifies the
+ * caller via [onDetectedCardsChange].
+ *
+ * Price is fetched lazily via [CatalogViewModel.fetchPrice2] whenever the resolved
+ * [priceUrl] changes. While the variant is [CardVariant.UNKNOWN] no fetch is made
+ * and "—" is shown. "..." indicates a fetch in progress; "N/A" indicates no URL
+ * was available for the resolved card.
+ *
+ * The +/− buttons increment or decrement [CardEntry.quantity]. Decrementing to zero
+ * removes the entry from [currentDetectedCards] entirely.
+ *
+ * @param mapKey The key identifying this entry in [currentDetectedCards].
+ * @param entry The card entry to display.
+ * @param allCards The full card pool used to resolve variants and card entity.
+ * @param viewModel The [CatalogViewModel] used for price fetching.
+ * @param imageLoader The [ImageLoader] instance used for the card thumbnail.
+ * @param colorOnSurface Base content colour for text and icons.
+ * @param colorOnSurfaceVariant Muted colour for secondary text and inactive borders.
+ * @param colorPrimary Accent colour for promo/SP rarity labels and the add button.
+ * @param colorError Colour applied to the rarity badge and border when variant is [CardVariant.UNKNOWN].
+ * @param useSgd If true, prices are displayed in SGD rather than JPY.
+ * @param onDetectedCardsChange Called with the updated map after any quantity or variant change.
+ * @param currentDetectedCards The current state of all detected cards, used as the base for updates.
+ * @param onCodeDetected Called with [CardEntry.code] after a quantity increment, e.g. to trigger a rescan beep.
  */
 @Composable
 private fun CardRow(
@@ -538,6 +744,25 @@ private fun CardRow(
 
 // ─── Save confirmation dialog ─────────────────────────────────────────────────
 
+/**
+ * A confirmation dialog shown before saving scanned cards to the collection.
+ *
+ * Splits [entries] into saveable entries (variant known) and skipped entries
+ * ([CardVariant.UNKNOWN]), and presents both groups to the user before they commit.
+ *
+ * - Saveable entries are listed with their code, variant label, and quantity.
+ * - Unknown-variant entries are listed in red with a warning and will not be saved.
+ * - If all entries are unknown, the confirm button is disabled and an error message
+ *   prompts the user to assign rarities first.
+ *
+ * @param entries The full list of [CardEntry]s pending save.
+ * @param colorError Colour used for unknown-variant warnings and the disabled state message.
+ * @param colorOnSurface Base content colour for saveable entry text.
+ * @param colorOnSurfaceVariant Muted colour for saveable entry detail rows.
+ * @param onConfirm Called when the user confirms. Only saveable entries should be persisted;
+ * filtering by variant != [CardVariant.UNKNOWN] is expected at the call site.
+ * @param onDismiss Called when the dialog is dismissed or cancelled.
+ */
 @Composable
 private fun SaveConfirmDialog(
     entries: List<CardEntry>,
@@ -614,6 +839,45 @@ private fun SaveConfirmDialog(
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
+/**
+ * Full-screen composable for scanning One Piece card codes using the device camera and MLKit OCR.
+ *
+ * The screen is split into two panels:
+ * - **Top (40%):** Live camera preview with a 300×80dp targeting reticle. Tapping the preview
+ *   triggers a one-shot AF action at the tapped point.
+ * - **Bottom (60%):** Scrollable list of scanned [CardEntry]s with variant, price, quantity,
+ *   and edit controls, plus Scan/Working, Reset, Save, and Back buttons.
+ *
+ * #### Scanning flow
+ * Pressing "Scan" sets [buttonWorking] to true, enabling OCR processing on incoming frames.
+ * Each frame is cropped via [cropCenterStrip], upscaled via [preprocessBitmap], then passed
+ * to the MLKit text recognizer. On a successful match against [allCards], the entry is added
+ * or its quantity incremented in [CatalogViewModel.detectedCards], [onCodeDetected] is called,
+ * and scanning stops automatically. On failure the state reverts to "retry" and the next
+ * frame is attempted. Pressing "Working..." while active cancels the current scan.
+ *
+ * #### Camera setup
+ * A CameraX pipeline is configured with a 4:3 aspect ratio, RGBA_8888 image analysis,
+ * and keep-only-latest backpressure. Continuous autofocus is triggered on bind via
+ * [triggerContinuousAutofocus]. The camera executor is shut down on disposal.
+ *
+ * #### Dialogs
+ * - **Reset:** Clears [CatalogViewModel.detectedCards] after confirmation.
+ * - **Save:** Shows [SaveConfirmDialog]; on confirm calls [CatalogViewModel.saveDetectedCards]
+ *   with the current entries, which internally skips [CardVariant.UNKNOWN] entries.
+ *
+ * #### Currency toggle
+ * A JPY/SGD toggle in the results header switches price display for all rows.
+ * SGD conversion uses a fixed rate of ¥115 = S$1.
+ *
+ * @param modifier Modifier applied to the root [Box].
+ * @param audioManager [AudioManager] forwarded to [SfxButton]s for sound feedback.
+ * @param imageLoader [ImageLoader] forwarded to [CardRow] for card thumbnail loading.
+ * @param viewModel [CatalogViewModel] providing card data, detected cards state, and price fetching.
+ * @param onBack Called when the Back button is tapped.
+ * @param onCodeDetected Called with the card code each time a successful scan or quantity
+ * increment occurs, e.g. to trigger an audio beep in the caller.
+ */
 @Composable
 fun OnePieceCardScan(
     modifier: Modifier = Modifier,
