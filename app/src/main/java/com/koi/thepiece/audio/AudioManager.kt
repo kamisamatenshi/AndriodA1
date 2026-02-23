@@ -153,7 +153,7 @@ class AudioManager(private val context: Context) {
     // ---------------------------
     /**
      * Tracks offered to the UI for selection.
-     * Add any new `res/raw/*.mp3` (or other supported formats) here.
+     * Add any new `res/raw/.mp3` (or other supported formats) here.
      */
     private val availableBgmTracks: List<BgmTrack> = listOf(
         BgmTrack(id = "default", title = "Default", resId = R.raw.bgm),

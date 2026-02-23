@@ -26,6 +26,33 @@ import coil.request.ImageRequest
 import coil.size.Scale
 import com.koi.thepiece.data.model.Card
 
+/**
+ * List-row UI for displaying a single Leader card in leader selection view.
+ *
+ * This component intentionally follows the structural layout of CardTileList
+ * from the catalogue module to maintain UI consistency across browsing screens.
+ *
+ * UI Alignment with CardTileList:
+ * - Identical rounded container styling (clip + border + surface background)
+ * - Identical thumbnail sizing and aspect ratio (56.dp width, 0.72f ratio)
+ * - Entire row is clickable
+ * - Text content aligned using weight(1f)
+ *
+ * Differences vs CardTileList:
+ * - No owned quantity badge overlay
+ * - No +/- quantity adjustment buttons
+ * - Displays only leader identification (code)
+ * - Pure selection component (no inventory interaction)
+ *
+ * Purpose:
+ * - Provide a clean, lightweight row layout for leader selection
+ * - Maintain visual parity with catalogue list view
+ * - Avoid inventory logic during leader pick flow
+ *
+ * @param card Domain card model used for display.
+ * @param imageLoader Shared Coil ImageLoader for consistent caching behavior.
+ * @param onClick Called when the row is tapped (opens leader preview dialog).
+ */
 @Composable
 fun LeaderTileList(
     card: Card,
@@ -42,6 +69,11 @@ fun LeaderTileList(
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+
+        /**
+         * Thumbnail container.
+         * Uses same dimensions as CardTileList to maintain visual consistency.
+         */
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(card.imageUrl)
@@ -60,6 +92,11 @@ fun LeaderTileList(
 
         Spacer(Modifier.width(10.dp))
 
+        /**
+         * Leader identifier section.
+         * In leader flow, only minimal information is shown.
+         * (Card name could be added later if needed.)
+         */
         Column(Modifier.weight(1f)) {
             Text(card.code ?: "-", style = MaterialTheme.typography.titleSmall)
         }

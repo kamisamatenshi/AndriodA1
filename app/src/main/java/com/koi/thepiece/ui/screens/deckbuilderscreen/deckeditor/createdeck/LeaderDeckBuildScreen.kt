@@ -23,21 +23,69 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.koi.thepiece.audio.AudioManager
 import coil.ImageLoader
+import com.koi.thepiece.audio.AudioManager
 import com.koi.thepiece.data.model.Card
 import com.koi.thepiece.ui.screens.catalogscreen.components.PagingRow
 import com.koi.thepiece.ui.screens.catalogscreen.components.SearchBarRow
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModel
 
+/**
+ * Leader selection view layout modes.
+ * - GRID: dense browsing experience for quickly scanning leader art
+ * - LIST: readability-focused layout for scanning leader names/details
+ */
 private enum class LeaderViewMode { GRID, LIST }
+
+/**
+ * Leader selection screen (deck creation entry).
+ *
+ * This screen intentionally follows the structural UI pattern defined in CatalogScreen
+ * to maintain a consistent browsing experience across modules.
+ *
+ * UI Alignment with CatalogScreen:
+ * - Identical TopAppBar layout (back button + grid/list toggle + filter action)
+ * - Identical filter model (set, color, rarity, type)
+ * - Identical SearchBarRow + suggestion pipeline
+ * - Identical PagingRow pagination logic
+ * - Identical Grid/List rendering structure (LazyVerticalGrid / LazyColumn)
+ *
+ * Purpose of Reuse:
+ * - Reduce cognitive load by preserving browsing mechanics across screens
+ * - Maintain UI consistency between Catalog, Leader selection, and Deck builder
+ * - Allow structural improvements in CatalogScreen to propagate here
+ *
+ * Responsibilities:
+ * - Restricts browsing to Leader cards only
+ * - Allows leader preview and confirmation
+ * - Passes selected leader into deck creation flow
+ *
+ * Architecture:
+ * - Uses DeckViewModel as the single source of truth
+ * - Observes vm.state via StateFlow
+ * - Delegates all state mutations to ViewModel methods
+ *
+ * Side Effects:
+ * - Forces ViewModel into leader-pick mode (vm.setLeaderPickMode())
+ * - Enforces cardType = "Leader" on entry
+ *
+ * @param vm DeckViewModel controlling filters, paging, and selection state.
+ * @param onBack Callback for navigation pop behavior.
+ * @param audio Audio manager used for click / UI feedback.
+ * @param imageLoader Shared Coil ImageLoader instance.
+ * @param onGoCreateNewDeck Callback invoked when leader is confirmed.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LeaderDeckBuildScreen(
@@ -47,23 +95,56 @@ fun LeaderDeckBuildScreen(
     imageLoader: ImageLoader,
     onGoCreateNewDeck: (Card) -> Unit
 ) {
+    /**
+     * Screen UI state:
+     * Contains full card list, active filters, paging, loading/error state,
+     * and current selected card for leader preview.
+     */
     val s by vm.state.collectAsState()
+
+    /**
+     * Screen mode:
+     * Leader picking requires different behavior semantics compared to normal catalog browsing,
+     * e.g., selecting a card should open the leader preview and proceed to create deck.
+     */
     vm.setLeaderPickMode()
 
+    /**
+     * Initial behavior on entering screen:
+     * Ensure this browsing experience is constrained to Leader cards.
+     */
     LaunchedEffect(Unit) {
         vm.setCardType("Leader")
     }
 
+    // Local UI state for view mode and filter sheet visibility
     var viewMode by rememberSaveable { mutableStateOf(LeaderViewMode.GRID) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
 
-    val cards = remember(s.allCards, s.color , s.cardType , s.setFilter, s.rarityFilter, s.searchQuery, s.page, s.pageSize) {
+    /**
+     * Derived view data:
+     * - cards: paged + filtered leader results for current view
+     * - totalPages: total pages after applying filters/search
+     *
+     * remember(...) prevents re-running list computations unless inputs change.
+     */
+    val cards = remember(
+        s.allCards, s.color, s.cardType, s.setFilter, s.rarityFilter, s.searchQuery, s.page, s.pageSize
+    ) {
         vm.pagedCards(s)
     }
-    val totalPages = remember(s.allCards, s.color, s.cardType, s.setFilter, s.rarityFilter, s.searchQuery, s.pageSize) {
+
+    val totalPages = remember(
+        s.allCards, s.color, s.cardType, s.setFilter, s.rarityFilter, s.searchQuery, s.pageSize
+    ) {
         vm.totalPages(s)
     }
 
+    /**
+     * Filter bottom sheet overlay:
+     * LeaderFilterBottomSheet mirrors the catalog filter sheet structure,
+     * but typically constrains type/rarity options for leader selection flow.
+     */
     if (showFilters) {
         LeaderFilterBottomSheet(
             currentSet = s.setFilter,
@@ -78,12 +159,18 @@ fun LeaderDeckBuildScreen(
                 vm.setSetFilter("all")
                 vm.setColor("all")
                 vm.setRarityFilter("all")
-                vm.setCardType("Leader")
+                vm.setCardType("Leader") // keep this screen leader-only
             },
             onDismiss = { showFilters = false }
         )
     }
 
+    /**
+     * Scaffold structure:
+     * - TopAppBar: back navigation, view mode toggle, filter action
+     * - Content: header + search + paging + grid/list of leaders
+     * - Modal: leader preview dialog for selection confirmation
+     */
     Scaffold(
         topBar = {
             TopAppBar(
@@ -101,7 +188,6 @@ fun LeaderDeckBuildScreen(
                     }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
                     }
-
                 },
                 actions = {
                     IconButton(onClick = {
@@ -113,6 +199,7 @@ fun LeaderDeckBuildScreen(
                             contentDescription = "Change view"
                         )
                     }
+
                     IconButton(onClick = { showFilters = true }) {
                         Icon(Icons.Filled.FilterList, contentDescription = "Filter")
                     }
@@ -120,24 +207,38 @@ fun LeaderDeckBuildScreen(
             )
         }
     ) { padding ->
+
+        /**
+         * Content column:
+         * - Header: leader browsing header block (set/loading/error)
+         * - Search bar with suggestions
+         * - Pagination controls
+         * - Grid/List of leader cards
+         * - Leader preview dialog when a leader is selected
+         */
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Header based on selected set
             LeaderHeaderBlock(
                 setCode = s.setFilter,
                 loading = s.loading,
                 error = s.error
             )
 
+            // Collect suggestions from ViewModel
+            val suggestions by vm.suggestions.collectAsState()
+
             SearchBarRow(
-                query = s.searchQuery,
-                suggestions = emptyList(),
-                onQueryChange = vm::setSearchQuery,
-                onSuggestionClick = { }
+                query = s.searchQuery,                    // Current search text
+                suggestions = suggestions,                // Suggestions list
+                onQueryChange = vm::setSearchQuery,       // Called when user types
+                onSuggestionClick = vm::selectSuggestion  // Called when suggestion clicked
             )
 
+            // Page navigation controls
             PagingRow(
                 page = s.page,
                 totalPages = totalPages,
@@ -147,6 +248,7 @@ fun LeaderDeckBuildScreen(
 
             Spacer(Modifier.height(6.dp))
 
+            // Main results view (leader browsing)
             when (viewMode) {
                 LeaderViewMode.GRID -> {
                     LazyVerticalGrid(
@@ -164,7 +266,6 @@ fun LeaderDeckBuildScreen(
                             )
                         }
                     }
-
                 }
 
                 LeaderViewMode.LIST -> {
@@ -185,6 +286,11 @@ fun LeaderDeckBuildScreen(
             }
         }
 
+        /**
+         * Leader preview dialog:
+         * Shown when a leader is selected from the grid/list.
+         * From this dialog, user confirms and proceeds to deck creation.
+         */
         if (s.selected != null) {
             LeaderPreviewDialog(
                 card = s.selected!!,
