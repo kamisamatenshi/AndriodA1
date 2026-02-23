@@ -1,13 +1,12 @@
 package com.koi.thepiece.ui.screens.catalogscreen
 
 import android.app.Application
-import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.FilterList
@@ -22,14 +21,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.ImageLoader
-import com.koi.thepiece.ui.screens.catalogscreen.components.CardTileGrid
+import com.koi.thepiece.audio.AudioManager
 import com.koi.thepiece.ui.screens.catalogscreen.components.CardPreviewDialog
+import com.koi.thepiece.ui.screens.catalogscreen.components.CardTileGrid
 import com.koi.thepiece.ui.screens.catalogscreen.components.CardTileList
+import com.koi.thepiece.ui.screens.catalogscreen.components.CatalogFooter
 import com.koi.thepiece.ui.screens.catalogscreen.components.CatalogHeaderBlock
 import com.koi.thepiece.ui.screens.catalogscreen.components.FilterBottomSheet
 import com.koi.thepiece.ui.screens.catalogscreen.components.PagingRow
 import com.koi.thepiece.ui.screens.catalogscreen.components.SearchBarRow
-import com.koi.thepiece.audio.AudioManager
 
 
 private enum class CatalogViewMode { GRID, LIST }
@@ -42,7 +42,7 @@ fun CatalogScreen(
     audio: AudioManager
 )
  {
-     val context = LocalContext.current
+    val context = LocalContext.current
     val app = LocalContext.current.applicationContext as Application
     val vm: CatalogViewModel = viewModel(factory = CatalogViewModelFactory(app,context))
     val s by vm.state.collectAsState()
@@ -60,6 +60,9 @@ fun CatalogScreen(
     val totalPages = remember(s.allCards, s.color, s.cardType, s.setFilter, s.rarityFilter, s.searchQuery, s.pageSize) {
         vm.totalPages(s)
     }
+
+     val totalNetWorth by vm.totalNetWorth.collectAsState(initial = 0)
+     val isSgd by vm.isSgd.collectAsState(initial = false)
 
     if (showFilters) {
         FilterBottomSheet(
@@ -114,6 +117,14 @@ fun CatalogScreen(
                     }
                 }
             )
+        },
+        bottomBar = { if (totalNetWorth != null && vm != null) {
+            CatalogFooter(
+                totalNetWorth = totalNetWorth.toDouble(),
+                isSgd = isSgd,
+                onToggleCurrency = { vm.toggleCurrency() }
+            )
+        }
         }
     ) { padding ->
 
@@ -155,7 +166,7 @@ fun CatalogScreen(
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.weight(1f)
                     ) {
                         items(cards, key = { it.id }) { card ->
                             CardTileGrid(
@@ -173,7 +184,7 @@ fun CatalogScreen(
 
                 CatalogViewMode.LIST -> {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {

@@ -1,5 +1,6 @@
 package com.koi.thepiece.ui.screens.catalogscreen.components
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -189,5 +191,63 @@ fun PagingRow(
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
             ) { Text("Next") }
         }
+    }
+}
+
+@Composable
+fun CatalogFooter(
+    totalNetWorth: Double,
+    isSgd: Boolean,
+    onToggleCurrency: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            // toggle button
+            CreateOutlinedButton(
+                text = if (isSgd) "SGD" else "JPY",
+                onClick = onToggleCurrency
+            )
+
+            // Total net worth
+            val displayText = if (isSgd) {
+                val sgd = totalNetWorth.toDouble() / 120.0
+                "S$${"%.2f".format(sgd)}"
+            } else {
+                "¥${"%,d".format(totalNetWorth.toLong())}"
+            }
+
+            Text(
+                text = "Total net worth: $displayText",
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun CreateOutlinedButton(
+    text: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(width = 40.dp, height = 32.dp)
+            .border(1.dp, MaterialTheme.colorScheme.onSurface, RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = text, style = MaterialTheme.typography.bodyMedium)
     }
 }

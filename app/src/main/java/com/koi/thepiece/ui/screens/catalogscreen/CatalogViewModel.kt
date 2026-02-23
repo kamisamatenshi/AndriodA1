@@ -22,6 +22,9 @@ import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 
 class CatalogViewModel(app: Application , private val tokenStore: TokenStore) : AndroidViewModel(app) {
 
@@ -39,6 +42,27 @@ class CatalogViewModel(app: Application , private val tokenStore: TokenStore) : 
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
     // Exposed as immutable StateFlow so UI can observe it
     val suggestions: StateFlow<List<String>> = _suggestions
+
+    private val _isSgd = MutableStateFlow(false)
+    val isSgd: StateFlow<Boolean> = _isSgd
+
+    val totalNetWorth: StateFlow<Int> =
+        combine(_state, _prices) { state, pricesMap ->
+
+            state.allCards.sumOf { card ->
+                val url = card.yuyuUrl
+                val price = if (!url.isNullOrBlank()) pricesMap[url] else null
+
+                if (card.ownedQty > 0 && price != null) {
+                    price * card.ownedQty
+                } else 0
+            }
+
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            0
+        )
 
     init {
         // Observe local DB (offline cache)
@@ -240,6 +264,11 @@ class CatalogViewModel(app: Application , private val tokenStore: TokenStore) : 
             val price = repo.getPrice2(cardUrl).getOrNull() ?: return@launch
             _prices.update { it + (cardUrl to price) }
         }
+    }
+
+    // -------- Toggle Currency between SGD/JPY --------
+    fun toggleCurrency() {
+        _isSgd.value = !_isSgd.value
     }
 
     //For OnePieceCardScan
