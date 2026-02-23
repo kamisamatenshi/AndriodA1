@@ -4,6 +4,17 @@ import android.app.Application
 import android.content.Context
 import com.koi.thepiece.AppGraph
 
+/**
+ * Factory for creating DeckListViewModel instances.
+ *
+ * Responsibilities:
+ * - Inject Application (required for AndroidViewModel)
+ * - Retrieve TokenStore from AppGraph
+ * - Construct DeckListViewModel with required dependencies
+ *
+ * This avoids direct dependency creation inside Composables
+ * and keeps ViewModel construction centralized.
+ */
 class DeckListViewModelFactory(
     private val app: Application,
     private val context: Context

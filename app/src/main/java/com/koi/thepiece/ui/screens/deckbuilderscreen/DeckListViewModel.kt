@@ -9,6 +9,14 @@ import com.koi.thepiece.data.model.Card
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
+/**
+ * UI projection model for rendering a single deck item in the deck list screen.
+ *
+ * This is a presentation-layer model derived from:
+ * - Deck entity (Room / server)
+ * - Leader card metadata (resolved from catalogue cache)
+ * - Share code mapping
+ */
 data class DeckListItemUi(
     val deckId: Long,
     val name: String,
@@ -20,16 +28,34 @@ data class DeckListItemUi(
     val sharecode: String?
 )
 
+/**
+ * ViewModel for the "My Decks" screen.
+ *
+ * Responsibilities:
+ * - Sync owned decks from server
+ * - Expose combined UI state for deck list
+ * - Handle import/delete actions
+ * - Emit snackbar feedback events
+ */
 class DeckListViewModel(app: Application ,private val tokenStore: TokenStore ) : AndroidViewModel(app) {
 
+    /** Repository for deck persistence and server sync */
     private val deckRepo = AppGraph.provideDeckRepository(app)
+
+    /** Repository for card metadata (leader name/image resolution) */
     private val catalogRepo = AppGraph.provideCatalogRepository(app)
 
+    /** Observes full card list from Room (offline-first source) */
     private val allCardsFlow: Flow<List<Card>> = catalogRepo.observeCards()
 
+    /** One-shot snackbar message stream */
     private val _snackbar = MutableSharedFlow<String>()
     val snackbar = _snackbar.asSharedFlow()
 
+    /**
+     * On initialization:
+     * - Attempt to sync owned decks from server if session token exists.
+     */
     init{
         viewModelScope.launch {
             val token = tokenStore.tokenFlow.firstOrNull()?.trim().orEmpty()
@@ -39,6 +65,9 @@ class DeckListViewModel(app: Application ,private val tokenStore: TokenStore ) :
         }
     }
 
+    /**
+     * Manually refresh owned decks from server.
+     */
     fun refreshDecksFromServer() {
         viewModelScope.launch {
             val token = tokenStore.tokenFlow.firstOrNull()?.trim().orEmpty()
@@ -48,6 +77,12 @@ class DeckListViewModel(app: Application ,private val tokenStore: TokenStore ) :
         }
     }
 
+    /**
+     * Import a deck using a share code.
+     *
+     * - Emits snackbar feedback.
+     * - Syncs owned decks after successful import.
+     */
     fun importDeckByShareCode(code: String) {
         viewModelScope.launch {
             runCatching {
@@ -66,6 +101,9 @@ class DeckListViewModel(app: Application ,private val tokenStore: TokenStore ) :
         }
     }
 
+    /**
+     * Deletes a deck using server-first strategy.
+     */
     fun deleteDeck(deckId: Long) {
         viewModelScope.launch {
             val token =tokenStore.tokenFlow.firstOrNull()?.trim().orEmpty()
@@ -73,16 +111,27 @@ class DeckListViewModel(app: Application ,private val tokenStore: TokenStore ) :
         }
     }
 
+    /**
+     * Reactive UI list combining:
+     * - Local decks
+     * - Card metadata (leader resolution)
+     * - Share code mapping
+     *
+     * Automatically updates when any source flow changes.
+     */
     val decksUi: StateFlow<List<DeckListItemUi>> =
         combine(
             deckRepo.observeAllDecks(),
             allCardsFlow,
             deckRepo.shareCodeMap
         ) { decks, cards ,shareMap ->
+
+            // Build lookup table for resolving leader metadata
             val cardById = cards.associateBy { it.id }
 
             decks.map { d ->
                 val leader = cardById[d.deck.leaderCardId]
+
                 DeckListItemUi(
                     deckId = d.deck.deckId,
                     name = d.deck.name,

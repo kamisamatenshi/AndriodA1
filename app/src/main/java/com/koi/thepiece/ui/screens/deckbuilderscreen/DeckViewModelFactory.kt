@@ -6,6 +6,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.koi.thepiece.AppGraph
 
+/**
+ * Factory for creating DeckViewModel instances.
+ *
+ * Responsibilities:
+ * - Inject Application (required for AndroidViewModel)
+ * - Retrieve TokenStore from AppGraph
+ * - Construct DeckViewModel with required dependencies
+ *
+ * This avoids direct dependency creation inside Composables
+ * and keeps ViewModel construction centralized.
+ */
 class DeckViewModelFactory(
     private val app: Application,
     private val context: Context
