@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import androidx.datastore.preferences.core.stringPreferencesKey
 
 // ✅ Top-level DataStore (recommended)
 private val Context.dataStore by preferencesDataStore(name = "audio_prefs")
@@ -36,6 +37,15 @@ private val Context.dataStore by preferencesDataStore(name = "audio_prefs")
 class AudioManager(private val context: Context) {
 
     // ----------------------------
+    // BGM Select
+    // ----------------------------
+    data class BgmTrack(
+        val id: String,     // unique id stored in DataStore
+        val title: String,  // name shown in Settings dropdown
+        val resId: Int      // raw resource id
+    )
+
+    // ----------------------------
     // DataStore keys
     // ----------------------------
 
@@ -50,6 +60,9 @@ class AudioManager(private val context: Context) {
         val PREV_MASTER = floatPreferencesKey("prev_master_volume")
         val PREV_BGM = floatPreferencesKey("prev_bgm_volume")
         val PREV_SFX = floatPreferencesKey("prev_sfx_volume")
+
+        // Datastore Key for selected track
+        val SELECTED_BGM_ID = stringPreferencesKey("selected_bgm_id")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -97,6 +110,23 @@ class AudioManager(private val context: Context) {
     private val _mutedState = MutableStateFlow(muted)
     val mutedState: StateFlow<Boolean> = _mutedState.asStateFlow()
 
+    private val _selectedBgmIdState = MutableStateFlow("default")
+    val selectedBgmIdState: StateFlow<String> = _selectedBgmIdState.asStateFlow()
+
+    // ---------------------------
+    // Available BGM tracks
+    // Add more tracks here if you put new mp3 in res/raw/
+    // ---------------------------
+    // ✅ Add your available tracks here
+    private val availableBgmTracks: List<BgmTrack> = listOf(
+        BgmTrack(id = "default", title = "Default", resId = R.raw.bgm),
+        // Add more when you have them in res/raw:
+        BgmTrack(id = "OP9", title = "OP9", resId = R.raw.bgm_2),
+        BgmTrack(id = "OP17", title = "OP17", resId = R.raw.bgm_3),
+        BgmTrack(id = "OP20", title = "OP20", resId = R.raw.bgm_4),
+    )
+
+
     init {
         // Load saved prefs on creation
         scope.launch {
@@ -108,6 +138,9 @@ class AudioManager(private val context: Context) {
             prevMasterVolume = (prefs[Keys.PREV_MASTER] ?: 1.0f).coerceIn(0f, 1f)
             prevBgmVolume = (prefs[Keys.PREV_BGM] ?: 1.0f).coerceIn(0f, 1f)
             prevSfxVolume = (prefs[Keys.PREV_SFX] ?: 1.0f).coerceIn(0f, 1f)
+
+            val savedBgmId = prefs[Keys.SELECTED_BGM_ID] ?: "default"
+            _selectedBgmIdState.value = savedBgmId
 
             muted = savedMuted
 
@@ -144,6 +177,9 @@ class AudioManager(private val context: Context) {
     fun getMasterVolume(): Float = masterVolume
     fun getBgmVolume(): Float = bgmVolume
     fun getSfxVolume(): Float = sfxVolume
+
+    // Expose track list to UI
+    fun getBgmTracks(): List<BgmTrack> = availableBgmTracks
     fun isMuted(): Boolean = muted
 
     // ----------------------------
@@ -292,6 +328,41 @@ class AudioManager(private val context: Context) {
             isLooping = loop
             start()
         }
+    }
+
+    // ----------------------------
+    // BGM playback from selected list
+    // ----------------------------
+    fun setSelectedBgm(id: String, loop: Boolean = true) {
+        // Find selected track
+        val track = availableBgmTracks.firstOrNull { it.id == id }
+            ?: availableBgmTracks.first() // fallback
+
+        // Update state
+        _selectedBgmIdState.value = track.id
+
+        // Save to DataStore
+        scope.launch {
+            context.dataStore.edit { prefs ->
+                prefs[Keys.SELECTED_BGM_ID] = track.id
+            }
+        }
+
+        // Switch BGM immediately
+        playBgm(track.resId, loop = loop)
+        applyBgmVolume()
+    }
+
+    // =====================
+    // ADDED: Play saved BGM on app start
+    // =====================
+    fun playSelectedBgm(loop: Boolean = true) {
+        val id = _selectedBgmIdState.value
+        val track = availableBgmTracks.firstOrNull { it.id == id }
+            ?: availableBgmTracks.first()
+
+        playBgm(track.resId, loop = loop)
+        applyBgmVolume()
     }
 
     // ----------------------------
