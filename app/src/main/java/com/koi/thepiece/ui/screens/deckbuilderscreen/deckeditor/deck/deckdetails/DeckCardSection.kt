@@ -1,4 +1,4 @@
-package com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck.DeckDetails
+package com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.deck.deckdetails
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -53,7 +53,7 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Scale
 import com.koi.thepiece.data.model.Card
-import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck.DeckViewMode
+import com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.deck.DeckViewMode
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckUiState
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModel
 import com.koi.thepiece.ui.screens.deckbuilderscreen.QtyClass
@@ -61,6 +61,17 @@ import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.text.orEmpty
 
+/**
+ * Renders the main deck card list for the deck details screen.
+ *
+ * Responsibilities:
+ * - Reads deck composition from [DeckUiState.deck] (cardId -> QtyClass)
+ * - Resolves card metadata from [DeckUiState.allCards]
+ * - Switches UI layout based on [DeckViewMode]:
+ *   - LIST: scrollable list with +/- controls
+ *   - GRID: compact grid with stock/required badges
+ * - Delegates interactions back to [DeckViewModel] (open card preview, add/remove)
+ */
 @Composable
 fun CardsSection(
     state: DeckUiState,
@@ -68,9 +79,13 @@ fun CardsSection(
     viewMode: DeckViewMode,
     imageLoader: ImageLoader,
 ) {
+    /** Stable snapshot of current deck entries (cardId -> QtyClass). */
     val deckEntries = state.deck.entries.toList()
 
     when (viewMode) {
+        // -------------------------
+        // LIST VIEW
+        // -------------------------
         DeckViewMode.LIST -> {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -78,12 +93,22 @@ fun CardsSection(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(deckEntries, key = { it.key }) { (cardId, qty) ->
+                    // Resolve Card details from catalogue cache.
                     val card = state.allCards.firstOrNull { it.id == cardId } ?: return@items
-                    DeckCardTileList(card, imageLoader, qty, vm , onClick = { vm.openCard(card) })
+                    DeckCardTileList(
+                        card = card,
+                        imageLoader = imageLoader,
+                        qty = qty,
+                        vm = vm,
+                        onClick = { vm.openCard(card) }
+                    )
                 }
             }
         }
 
+        // -------------------------
+        // GRID VIEW
+        // -------------------------
         DeckViewMode.GRID -> {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(5),
@@ -93,14 +118,30 @@ fun CardsSection(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(deckEntries, key = { it.key }) { (cardId, qty) ->
+                    // Resolve Card details from catalogue cache.
                     val card = state.allCards.firstOrNull { it.id == cardId } ?: return@items
-                    DeckCardTileGrid(card, imageLoader, qty,vm ,onClick = { vm.openCard(card) })
+                    DeckCardTileGrid(
+                        card = card,
+                        imageLoader = imageLoader,
+                        qty = qty,
+                        vm = vm,
+                        onClick = { vm.openCard(card) }
+                    )
                 }
             }
         }
     }
 }
 
+/**
+ * List-style deck card tile that uses [DeckCardRow] and provides +/- controls.
+ *
+ * Responsibilities:
+ * - Shows card preview row (image + metadata handled by DeckCardRow)
+ * - Displays stock and required quantities (requiredQty + stockQty)
+ * - Provides increment/decrement buttons that call [DeckViewModel.addToDeck] and
+ *   [DeckViewModel.removeFromDeck]
+ */
 @Composable
 fun DeckCardTileList(
     card: Card,
@@ -108,7 +149,7 @@ fun DeckCardTileList(
     qty: QtyClass,
     vm: DeckViewModel,
     onClick: () -> Unit
-){
+) {
     DeckCardRow(
         card = card,
         stockqty = qty.stockQty,
@@ -121,14 +162,21 @@ fun DeckCardTileList(
                     modifier = Modifier
                         .align(Alignment.End)
                         .padding(bottom = 6.dp),
-
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Control availability (UI rule: 0..4 copies per card)
                     val canMinus = qty.requiredQty > 0
                     val canPlus = qty.requiredQty < 4
 
-                    OverlayCircleButton(text = "−", enabled = canMinus, onClick = { vm.removeFromDeck(card) })
+                    // Decrement quantity
+                    OverlayCircleButton(
+                        text = "−",
+                        enabled = canMinus,
+                        onClick = { vm.removeFromDeck(card) }
+                    )
+
+                    // Current required quantity display
                     Text(
                         text = qty.requiredQty.toString(),
                         style = MaterialTheme.typography.titleMedium,
@@ -136,13 +184,27 @@ fun DeckCardTileList(
                         textAlign = TextAlign.Center
                     )
 
-                    OverlayCircleButton(text = "+", enabled = canPlus, onClick = { vm.addToDeck(card) })
+                    // Increment quantity
+                    OverlayCircleButton(
+                        text = "+",
+                        enabled = canPlus,
+                        onClick = { vm.addToDeck(card) }
+                    )
                 }
             }
         }
     )
 }
 
+/**
+ * Grid-style deck card tile.
+ *
+ * Responsibilities:
+ * - Displays the card image
+ * - Shows stock badge (top-left) and required badge (top-right)
+ * - Shows card code underneath for identification
+ * - Entire tile is clickable to open the card preview
+ */
 @Composable
 fun DeckCardTileGrid(
     card: Card,
@@ -164,6 +226,7 @@ fun DeckCardTileGrid(
                 .fillMaxWidth()
                 .aspectRatio(0.72f)
         ) {
+            // Card image (cached with Coil)
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(card.imageUrl)
@@ -194,8 +257,7 @@ fun DeckCardTileGrid(
             )
         }
 
-
-
+        // Card code label under the image
         Text(
             text = card.code.orEmpty().ifBlank { "-" },
             style = MaterialTheme.typography.labelSmall,
@@ -206,12 +268,24 @@ fun DeckCardTileGrid(
     }
 }
 
+/**
+ * Circular badge showing owned stock quantity.
+ *
+ * Visual rules:
+ * - qty >= 4: gold badge + shimmer highlight (signals "playset owned")
+ * - qty > 0 : green badge (owned)
+ * - qty == 0: red badge (not owned)
+ *
+ * Animation:
+ * - Pop animation on qty changes (scale up then back)
+ * - Shimmer sweep only when gold (qty >= 4)
+ */
 @Composable
 fun Qtybadge(qty: Int, modifier: Modifier = Modifier) {
 
     val isGold = qty >= 4
 
-    // Colors
+    // Resolve colors + elevation based on qty state.
     val backgroundColor: Color
     val contentColor: Color
     val elev: Dp
@@ -234,15 +308,15 @@ fun Qtybadge(qty: Int, modifier: Modifier = Modifier) {
         }
     }
 
+    // Pop animation when qty changes (small scale "bounce").
     val pop = remember { Animatable(1f) }
     LaunchedEffect(qty) {
-
         pop.snapTo(1f)
         pop.animateTo(1.12f, tween(120, easing = LinearEasing))
         pop.animateTo(1f, tween(160, easing = LinearEasing))
-
     }
 
+    // Shimmer sweep progress used only for gold state.
     val shimmerT = rememberInfiniteTransition(label = "badgeShimmer")
         .animateFloat(
             initialValue = -0.5f,
@@ -254,6 +328,7 @@ fun Qtybadge(qty: Int, modifier: Modifier = Modifier) {
             label = "badgeShimmerT"
         ).value
 
+    // Shimmer overlay modifier (enabled only when qty >= 4).
     val shimmerModifier =
         if (isGold) Modifier.drawWithContent {
             drawContent()
@@ -303,24 +378,28 @@ fun Qtybadge(qty: Int, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Circular badge showing required quantity inside the deck (0..4).
+ *
+ * Animation:
+ * - Pop animation on qty changes (scale up then back)
+ */
 @Composable
 fun RequiredBadge(
     qty: Int,
     modifier: Modifier = Modifier
 ) {
-
+    // Pop animation when qty changes.
     val pop = remember { Animatable(1f) }
     LaunchedEffect(qty) {
-
         pop.snapTo(1f)
         pop.animateTo(1.12f, tween(120, easing = LinearEasing))
         pop.animateTo(1f, tween(160, easing = LinearEasing))
-
     }
 
-
     Surface(
-        modifier = modifier.size(22.dp)
+        modifier = modifier
+            .size(22.dp)
             .graphicsLayer {
                 scaleX = pop.value
                 scaleY = pop.value
@@ -342,6 +421,12 @@ fun RequiredBadge(
     }
 }
 
+/**
+ * Pill UI showing "required/stock" in a single compact label.
+ *
+ * Note:
+ * - Currently unused in this snippet, but kept as a reusable UI primitive.
+ */
 @Composable
 fun ReqStockPill(
     req: Int,
@@ -362,6 +447,14 @@ fun ReqStockPill(
         )
     }
 }
+
+/**
+ * Small circular button used as an overlay control (e.g., +/- for required quantity).
+ *
+ * @param text Button label (e.g., "+", "−")
+ * @param enabled When false, button becomes disabled (no click)
+ * @param onClick Action callback
+ */
 @Composable
 fun OverlayCircleButton(
     text: String,

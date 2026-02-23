@@ -1,4 +1,4 @@
-package com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck
+package com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.createdeck
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,9 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-
 @Composable
-fun DeckHeaderBlock(
+fun LeaderHeaderBlock(
     setCode: String,
     loading: Boolean,
     error: String?
@@ -43,3 +42,4 @@ fun DeckHeaderBlock(
         }
     }
 }
+

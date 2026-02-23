@@ -1,4 +1,4 @@
-package com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck
+package com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.createdeck
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,15 +15,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,14 +48,13 @@ import com.koi.thepiece.data.model.Card
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModel
 
 @Composable
-fun DeckPreviewDialog(
+fun LeaderPreviewDialog(
     card: Card,
     imageLoader: ImageLoader,
     onDismiss: () -> Unit,
-    viewModel : DeckViewModel,
-    normal : Boolean,
-    onAddToDeck: (Card) -> Unit
-) {
+    viewModel: DeckViewModel,
+    onGoCreateNewDeck: (Card) -> Unit
+){
     val prices by viewModel.prices.collectAsState()
     val url = card.yuyuUrl
 
@@ -70,9 +66,6 @@ fun DeckPreviewDialog(
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
-
-    val ui by viewModel.state.collectAsState()   // <-- StateFlow<DeckUiState>
-    val qtyInDeck = ui.deck[card.id]?.requiredQty ?: 0
 
     val state = rememberTransformableState { zoomChange, panChange, _ ->
         scale = (scale * zoomChange).coerceIn(1f, 4f)
@@ -150,7 +143,6 @@ fun DeckPreviewDialog(
                         )
                     }
                 }
-
                 Spacer(modifier = Modifier.weight(1f))
 
                 // Close
@@ -191,7 +183,8 @@ fun DeckPreviewDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 10.dp),
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Image
@@ -206,7 +199,7 @@ fun DeckPreviewDialog(
                     imageLoader = imageLoader,
                     contentDescription = card.code ?: "Card",
                     modifier = Modifier
-                        .fillMaxWidth(0.78f)      // <-- controls actual layout size
+                        .fillMaxWidth()
                         .aspectRatio(0.69f)
                         .transformable(state)
                         .graphicsLayer(
@@ -246,7 +239,7 @@ fun DeckPreviewDialog(
                         }
                     }
                 }
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(12.dp))
 
                 // Other Properties
                 Column(
@@ -330,74 +323,18 @@ fun DeckPreviewDialog(
                         Text(displayText)
                     }
                 }
-                if (normal) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
 
-                        // Quantity selector row
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                Spacer(Modifier.height(20.dp))
 
-                            // Minus
-                            OverlayCircleButton(
-                                text = "−",
-                                enabled = qtyInDeck > 0,
-                                onClick = { viewModel.removeFromDeck(card) }
-                            )
 
-                            // Qty display
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                tonalElevation = 1.dp,
-                                modifier = Modifier.padding(horizontal = 4.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier.padding(
-                                        horizontal = 16.dp,
-                                        vertical = 8.dp
-                                    ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = qtyInDeck.toString(),
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                }
-                            }
-
-                            // Plus
-                            OverlayCircleButton(
-                                text = "+",
-                                enabled = qtyInDeck < 4,
-                                onClick = { viewModel.addToDeck(card) }
-                            )
-                        }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = {
+                        onGoCreateNewDeck(card)   // 👈 pass the card
+                    }) {
+                        Text("Build with this leader")
                     }
                 }
             }
         }
     )
-}
-
-@Composable
-fun OverlayCircleButton(
-    text: String,
-    enabled: Boolean = true,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        shape = CircleShape,
-        tonalElevation = 2.dp,
-        modifier = Modifier.size(34.dp)
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(text = text, style = MaterialTheme.typography.titleMedium)
-        }
-    }
 }

@@ -1,4 +1,4 @@
-package com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck
+package com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.deck
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -51,13 +51,66 @@ import coil.ImageLoader
 import com.koi.thepiece.audio.AudioManager
 import com.koi.thepiece.ui.screens.catalogscreen.components.PagingRow
 import com.koi.thepiece.ui.screens.catalogscreen.components.SearchBarRow
-import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck.DeckDetails.CardsSection
-import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck.DeckDetails.LeaderSection
-import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckLegality
+import com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.deck.deckdetails.CardsSection
+import com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.deck.deckdetails.LeaderSection
+import com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.DeckLegality
 import com.koi.thepiece.ui.screens.deckbuilderscreen.DeckViewModel
 import kotlin.collections.get
 
+/**
+ * Deck view layout modes.
+ * - GRID: dense browsing experience for large card lists
+ * - LIST: readability-focused layout for scanning names and quick edits
+ */
 enum class DeckViewMode { GRID, LIST }
+
+/**
+ * Deck Builder main screen.
+ *
+ * This screen extends the CatalogScreen browsing architecture
+ * and layers deck composition functionality beneath it.
+ *
+ * Structural Similarities to CatalogScreen:
+ * - Identical TopAppBar layout:
+ *   - Back navigation with audio feedback
+ *   - Grid/List toggle for browsing
+ *   - Filter bottom sheet trigger
+ * - Identical filter model:
+ *   - setFilter / color / rarityFilter / cardType
+ * - Identical search implementation:
+ *   - SearchBarRow with ViewModel-driven suggestions
+ * - Identical paging logic:
+ *   - PagingRow using ViewModel page/pageSize
+ * - Identical grid/list rendering structure:
+ *   - LazyVerticalGrid (5 columns)
+ *   - LazyColumn
+ *
+ * Architectural Alignment:
+ * - ViewModel is the single source of truth (DeckViewModel)
+ * - UI observes vm.state as StateFlow
+ * - All mutations delegated to ViewModel methods
+ * - Derived lists computed via vm.pagedCards(s)
+ *
+ * Key Differences (Deck Builder Layer):
+ * - Vertical split layout:
+ *   - Top half = card browsing (add source)
+ *   - Bottom half = deck composition state
+ * - Leader + Cards tab system
+ * - Deck legality validation via DeckLegality.check()
+ * - Deck persistence via vm.saveDeck()
+ * - Price aggregation based on deck contents
+ * - Separate view mode toggle for deck list/grid
+ *
+ * Side Effects:
+ * - Forces card pick mode on entry (vm.setCardPickMode())
+ * - Resets filters to "all" on first composition
+ * - Fetches prices for cards currently inside deck
+ *
+ * @param vm DeckViewModel controlling deck state and mutations.
+ * @param onBack Navigation callback.
+ * @param audio AudioManager for UI click feedback.
+ * @param imageLoader Shared Coil ImageLoader for image consistency.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeckCardBuildScreen(
@@ -66,15 +119,39 @@ fun DeckCardBuildScreen(
     audio: AudioManager,
     imageLoader: ImageLoader
 ) {
+
+    /**
+     * Screen UI state:
+     * Contains full card list, active filters, paging, selected leader, deck map,
+     * loading/error state, and current selected card for preview modal.
+     */
     val s by vm.state.collectAsState()
     val leader = s.selectedLeader
+
+    /**
+     * Price cache state:
+     * prices is keyed by yuyuUrl (or the URL key used in vm.fetchPrice2)
+     * and stores fetched card prices for aggregation in the deck summary.
+     */
     val prices by vm.prices.collectAsState()
+
+    // Local UI state for dialogs
     var showSaveDialog by rememberSaveable { mutableStateOf(false) }
     var deckName by rememberSaveable { mutableStateOf("") }
     var showValidateDialog by rememberSaveable { mutableStateOf(false) }
 
+    /**
+     * Screen mode:
+     * Deck builder requires a specialized "card pick mode" so taps behave as
+     * "select + add to deck" flows rather than catalogue ownership flows.
+     */
     vm.setCardPickMode()
 
+    /**
+     * Deck price fetching:
+     * Whenever deck contents or card database changes, request prices for each card in deck.
+     * ViewModel should dedupe/cache by URL to avoid redundant network calls.
+     */
     LaunchedEffect(s.deck, s.allCards) {
         s.deck.keys.forEach { cardId ->
             val card = s.allCards.firstOrNull { it.id == cardId }
@@ -82,6 +159,11 @@ fun DeckCardBuildScreen(
         }
     }
 
+    /**
+     * Initial behavior on entering screen:
+     * - Close any open modal (defensive)
+     * - Reset filters so deck builder always starts from a neutral browsing state ("all")
+     */
     LaunchedEffect(Unit) {
         vm.closeModal()
         vm.setSetFilter("all")
@@ -90,17 +172,34 @@ fun DeckCardBuildScreen(
         vm.setCardType("all")
     }
 
+    // Local UI state for view modes and filter sheet visibility
     var catalogViewMode by rememberSaveable { mutableStateOf(DeckViewMode.GRID) }
     var deckViewMode by rememberSaveable { mutableStateOf(DeckViewMode.LIST) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
 
-    val cards = remember(s.allCards, s.color , s.cardType , s.setFilter, s.rarityFilter, s.searchQuery, s.page, s.pageSize) {
+    /**
+     * Derived view data (catalog browsing):
+     * - cards: filtered + paged results based on ViewModel state
+     * - totalPages: computed after applying active filters/search
+     *
+     * remember(...) prevents re-running list computations unless inputs change.
+     */
+    val cards = remember(
+        s.allCards, s.color, s.cardType, s.setFilter, s.rarityFilter, s.searchQuery, s.page, s.pageSize
+    ) {
         vm.pagedCards(s)
     }
-    val totalPages = remember(s.allCards, s.color, s.cardType, s.setFilter, s.rarityFilter, s.searchQuery, s.pageSize) {
+
+    val totalPages = remember(
+        s.allCards, s.color, s.cardType, s.setFilter, s.rarityFilter, s.searchQuery, s.pageSize
+    ) {
         vm.totalPages(s)
     }
 
+    /**
+     * Filter bottom sheet overlay:
+     * Same filter structure as CatalogScreen, but uses DeckViewModel mutations.
+     */
     if (showFilters) {
         DeckFilterBottomSheet(
             currentSet = s.setFilter,
@@ -121,6 +220,13 @@ fun DeckCardBuildScreen(
         )
     }
 
+    /**
+     * Scaffold structure:
+     * - TopAppBar: back navigation, catalog view mode toggle, filter action
+     * - Content: vertically split into:
+     *   (Top) Card browsing (catalog-like)
+     *   (Bottom) Deck composition + tabs + actions
+     */
     Scaffold(
         topBar = {
             TopAppBar(
@@ -138,7 +244,6 @@ fun DeckCardBuildScreen(
                     }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
                     }
-
                 },
                 actions = {
                     IconButton(onClick = {
@@ -150,6 +255,7 @@ fun DeckCardBuildScreen(
                             contentDescription = "Change view"
                         )
                     }
+
                     IconButton(onClick = { showFilters = true }) {
                         Icon(Icons.Filled.FilterList, contentDescription = "Filter")
                     }
@@ -157,11 +263,24 @@ fun DeckCardBuildScreen(
             )
         }
     ) { padding ->
+
+        /**
+         * Root content:
+         * Two major regions stacked vertically with equal weight:
+         * - Top: browsing results (add source)
+         * - Bottom: current deck state (leader + cards)
+         */
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
+
+            /**
+             * Top Region — Catalog browsing:
+             * - Header, search, paging
+             * - Grid/List of cards (tap opens preview modal)
+             */
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -178,10 +297,10 @@ fun DeckCardBuildScreen(
                 val suggestions by vm.suggestions.collectAsState()
 
                 SearchBarRow(
-                    query = s.searchQuery,
-                    suggestions = suggestions,
-                    onQueryChange = vm::setSearchQuery,
-                    onSuggestionClick = vm::selectSuggestion
+                    query = s.searchQuery,                     // Current search text
+                    suggestions = suggestions,                 // Suggestions list
+                    onQueryChange = vm::setSearchQuery,        // Called when user types
+                    onSuggestionClick = vm::selectSuggestion   // Called when suggestion clicked
                 )
 
                 PagingRow(
@@ -193,6 +312,7 @@ fun DeckCardBuildScreen(
 
                 Spacer(Modifier.height(6.dp))
 
+                // Main results view (catalog side)
                 when (catalogViewMode) {
                     DeckViewMode.GRID -> {
                         LazyVerticalGrid(
@@ -232,6 +352,13 @@ fun DeckCardBuildScreen(
 
             HorizontalDivider()
 
+            /**
+             * Bottom Region — Deck composition:
+             * - Summary row (total price + validate/save + view toggle)
+             * - Tabs: Leader / Cards
+             * - LeaderSection: set/select leader card
+             * - CardsSection: shows deck composition in grid/list
+             */
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -239,13 +366,18 @@ fun DeckCardBuildScreen(
             ) {
                 var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
-
-
+                /**
+                 * Deck count + tabs:
+                 * totalCards is derived from requiredQty in deck map.
+                 */
                 val totalCards = s.deck.values.sumOf { it.requiredQty }
-                val tabs = listOf(
-                    "Leader",
-                    "Cards ($totalCards/50)"
-                )
+                val tabs = listOf("Leader", "Cards ($totalCards/50)")
+
+                /**
+                 * Deck price aggregation:
+                 * totalYen multiplies fetched yen price by requiredQty.
+                 * missingCount is used to show "(…)" when some cards haven't fetched prices yet.
+                 */
                 val totalYen = s.deck.entries.sumOf { (cardId, qty) ->
                     val card = s.allCards.firstOrNull { it.id == cardId }
                     val yen = prices[card?.yuyuUrl] ?: 0
@@ -264,6 +396,13 @@ fun DeckCardBuildScreen(
                     "¥${"%,d".format(totalYen)}"
                 }
 
+                /**
+                 * Deck action row:
+                 * - Price summary
+                 * - Validate (requires leader)
+                 * - Save/Update (requires leader + non-empty deck)
+                 * - Deck view mode toggle independent of catalog view mode
+                 */
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -314,6 +453,7 @@ fun DeckCardBuildScreen(
                     }
                 }
 
+                // Tabs
                 TabRow(selectedTabIndex = selectedTab) {
                     tabs.forEachIndexed { index, title ->
                         Tab(
@@ -332,9 +472,18 @@ fun DeckCardBuildScreen(
                         imageLoader = imageLoader,
                         card = leader
                     )
-                    1 -> CardsSection(state = s, vm = vm, viewMode = deckViewMode, imageLoader = imageLoader)
+                    1 -> CardsSection(
+                        state = s,
+                        vm = vm,
+                        viewMode = deckViewMode,
+                        imageLoader = imageLoader
+                    )
                 }
 
+                /**
+                 * Save deck dialog:
+                 * Prompts for deck name then calls vm.saveDeck(deckName).
+                 */
                 if (showSaveDialog) {
                     AlertDialog(
                         onDismissRequest = { showSaveDialog = false },
@@ -367,6 +516,10 @@ fun DeckCardBuildScreen(
                     )
                 }
 
+                /**
+                 * Validate deck dialog:
+                 * Runs DeckLegality.check() and shows errors/warnings.
+                 */
                 if (showValidateDialog) {
 
                     val result = DeckLegality.check(
@@ -380,10 +533,7 @@ fun DeckCardBuildScreen(
                         onDismissRequest = { showValidateDialog = false },
                         title = {
                             Text(
-                                if (result.isLegal)
-                                    "✅ Deck is Legal"
-                                else
-                                    "❌ Deck Not Legal"
+                                if (result.isLegal) "✅ Deck is Legal" else "❌ Deck Not Legal"
                             )
                         },
                         text = {
@@ -412,23 +562,28 @@ fun DeckCardBuildScreen(
                     )
                 }
             }
-        }
 
-        if (s.selected != null) {
+            /**
+             * Card preview dialog (deck builder):
+             * Shown when a card is selected from the browsing list.
+             * The `normal` flag is derived from card type and gates quantity controls.
+             */
+            if (s.selected != null) {
 
-            val isNormal = s.selected!!.type.equals("Event", true) ||
-                    s.selected!!.type.equals("Stage", true) ||
-                    s.selected!!.type.equals("Normal", true)
+                val isNormal =
+                    s.selected!!.type.equals("Event", true) ||
+                            s.selected!!.type.equals("Stage", true) ||
+                            s.selected!!.type.equals("Normal", true)
 
-            DeckPreviewDialog(
-                card = s.selected!!,
-                imageLoader = imageLoader,
-                onDismiss = vm::closeModal,
-                viewModel = vm,
-                normal = isNormal,
-                onAddToDeck = vm::addToDeck
-            )
-
+                DeckPreviewDialog(
+                    card = s.selected!!,
+                    imageLoader = imageLoader,
+                    onDismiss = vm::closeModal,
+                    viewModel = vm,
+                    normal = isNormal,
+                    onAddToDeck = vm::addToDeck
+                )
+            }
         }
     }
 }

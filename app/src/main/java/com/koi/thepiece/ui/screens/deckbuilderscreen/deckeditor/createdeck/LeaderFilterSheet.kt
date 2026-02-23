@@ -1,4 +1,4 @@
-package com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck
+package com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.createdeck
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -26,7 +26,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedFilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -52,8 +51,8 @@ object ChipStyle {
     var elevationUnselected = 2.dp
     var elevationSelected = 10.dp
 
-    var textSelected = Color(0xFF1A1A1A) // dark text on gold
-    var textUnselected = Color(0xFF111111)
+    var textSelected = Color(0xFF1E1F22) // dark text on gold
+    var textUnselected = Color(0xFF1E1F22)
 
     var selectedOverrideColor: Color? = null
     var unselectedOverrideColor: Color? = null
@@ -68,19 +67,16 @@ val colorOptions = buildList {
     add("all")
 
     // Colors
-    addAll(listOf("Red", "Green", "Blue", "Purple", "Black", "Yellow"))
+    addAll(listOf("Red", "Green", "Blue", "Purple", "Black", "Yellow" ,"Mix"))
 }
 
 val typeOption = buildList {
-    add("all")
-
     // Card Types
-    addAll(listOf("Normal","Event", "Stage"))
+    addAll(listOf("Leader"))
 }
 val rarityOption = buildList {
-    addAll(listOf("all", "A-SEC", "SEC", "A-SR", "SR", "A-R", "R","SP","UC","C"))
+    addAll(listOf("all", "A-L", "L"))
 }
-
 
 @Composable
 private fun unselectedContainerColor(): Color {
@@ -92,7 +88,7 @@ private fun unselectedContainerColor(): Color {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DeckFilterBottomSheet(
+fun LeaderFilterBottomSheet(
     currentSet: String,
     currentColor: String,
     currentRarity: String,
@@ -248,15 +244,15 @@ private fun OPFilterChip(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
 
-    val targetElevation = if (selected) com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.CreateDeck.ChipStyle.elevationSelected else com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.CreateDeck.ChipStyle.elevationUnselected
+    val targetElevation = if (selected) ChipStyle.elevationSelected else ChipStyle.elevationUnselected
     val elevation by animateDpAsState(targetValue = targetElevation, label = "chipElevation")
 
     val targetScale = if (pressed) 0.96f else 1f
     val scale by animateFloatAsState(targetValue = targetScale, label = "chipScale")
 
     val containerSelected =
-        com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.CreateDeck.ChipStyle.selectedOverrideColor ?: com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.CreateDeck.ChipStyle.gold.copy(alpha = 0.92f)
-    val containerUnselected = com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.CreateDeck.ChipStyle.unselectedOverrideColor ?: unselectedContainerColor()
+        ChipStyle.selectedOverrideColor ?: ChipStyle.gold.copy(alpha = 0.92f)
+    val containerUnselected = ChipStyle.unselectedOverrideColor ?: unselectedContainerColor()
 
     val infinite = rememberInfiniteTransition(label = "sparkle")
 
@@ -301,8 +297,8 @@ private fun OPFilterChip(
         if (selected) Modifier.shadow(
             elevation = elevation,
             shape = shape,
-            ambientColor = com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.CreateDeck.ChipStyle.gold.copy(alpha = 0.55f),
-            spotColor = com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.CreateDeck.ChipStyle.gold.copy(alpha = 0.55f)
+            ambientColor = ChipStyle.gold.copy(alpha = 0.55f),
+            spotColor = ChipStyle.gold.copy(alpha = 0.55f)
         ) else Modifier
 
     ElevatedFilterChip(
@@ -329,8 +325,8 @@ private fun OPFilterChip(
         colors = FilterChipDefaults.elevatedFilterChipColors(
             containerColor = containerUnselected,
             selectedContainerColor = containerSelected,
-            labelColor = com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.CreateDeck.ChipStyle.textUnselected,
-            selectedLabelColor = com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.CreateDeck.ChipStyle.textSelected
+            labelColor = ChipStyle.textUnselected,
+            selectedLabelColor = ChipStyle.textSelected
         ),
         elevation = FilterChipDefaults.elevatedFilterChipElevation(
             elevation = elevation,

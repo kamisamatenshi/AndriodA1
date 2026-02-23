@@ -1,4 +1,4 @@
-package com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck
+package com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.deck
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,6 +26,28 @@ import coil.request.ImageRequest
 import coil.size.Scale
 import com.koi.thepiece.data.model.Card
 
+/**
+ * List-row UI for displaying a single card inside Deck Builder catalogue mode.
+ *
+ * This implementation follows the same structural pattern as:
+ * - CardTileList (catalogscreen.components) in CardList.kt
+ *
+ * Structural Similarities:
+ * - Rounded row container
+ * - Coil AsyncImage thumbnail
+ * - Weighted text column layout
+ *
+ * Key Differences:
+ * - No owned quantity badge
+ * - No +/- quantity controls
+ * - Displays only card.code (minimal information)
+ *
+ * Refer to CardTileList for the full-featured list-row pattern.
+ *
+ * @param card Domain card model used for display.
+ * @param imageLoader Shared Coil ImageLoader for consistent caching.
+ * @param onClick Callback triggered when the row is tapped.
+ */
 @Composable
 fun DeckTileList(
     card: Card,
@@ -42,6 +64,7 @@ fun DeckTileList(
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Card thumbnail image
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(card.imageUrl)
@@ -60,8 +83,12 @@ fun DeckTileList(
 
         Spacer(Modifier.width(10.dp))
 
+        /**
+         * Card text section.
+         * weight(1f) ensures the title expands and the buttons stay aligned right.
+         */
         Column(Modifier.weight(1f)) {
-            Text(card.code ?: "-", style = MaterialTheme.typography.titleSmall)
+            Text(card.code?: "-", style = MaterialTheme.typography.titleSmall)
         }
     }
 }

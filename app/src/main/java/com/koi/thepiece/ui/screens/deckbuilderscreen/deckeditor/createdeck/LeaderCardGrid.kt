@@ -1,24 +1,22 @@
-package com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.Deck.DeckDetails
+package com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.createdeck
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.ImageLoader
 import coil.compose.AsyncImage
@@ -28,35 +26,24 @@ import coil.size.Scale
 import com.koi.thepiece.data.model.Card
 
 @Composable
-fun DeckCardRow(
+fun LeaderTileGrid(
     card: Card,
-    stockqty: Int,
-    requiredqty: Int,
     imageLoader: ImageLoader,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-    trailing: @Composable (() -> Unit)? = null,
+    onClick: () -> Unit
 ) {
-    Row(
-        modifier = modifier
+    Column(
+        modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .border(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant,
-                RoundedCornerShape(12.dp)
-            )
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .padding(10.dp)
-            .clickable(onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable(onClick = onClick)
     ) {
         Box(
             modifier = Modifier
-                .width(72.dp)
+                .fillMaxWidth()
                 .aspectRatio(0.72f)
-        )
-        {
+        ) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(card.imageUrl)
@@ -67,29 +54,16 @@ fun DeckCardRow(
                     .build(),
                 imageLoader = imageLoader,
                 contentDescription = card.code ?: "Card",
-                modifier = Modifier
-                    .width(72.dp)
-                    .aspectRatio(0.72f)
-                    .clip(RoundedCornerShape(8.dp))
-            )
-            Qtybadge(
-                qty = stockqty,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-
+                modifier = Modifier.fillMaxSize()
             )
         }
-        Spacer(Modifier.width(12.dp))
 
-        Column(Modifier.weight(1f)) {
-            Text(card.code ?: "-", style = MaterialTheme.typography.titleSmall)
-            Text(card.name, style = MaterialTheme.typography.bodySmall)
-            Text("Color: ${card.color}", style = MaterialTheme.typography.bodySmall)
-        }
-
-        if (trailing != null) {
-            Spacer(Modifier.width(12.dp))
-            trailing()
-        }
+        Text(
+            text = card.code ?: "-",
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }

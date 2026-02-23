@@ -1,4 +1,4 @@
-package com.koi.thepiece.ui.screens.deckbuilderscreen.DeckEditor.CreateDeck
+package com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.createdeck
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border

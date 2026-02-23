@@ -1,6 +1,7 @@
 package com.koi.thepiece.ui.screens.deckbuilderscreen
 
 import com.koi.thepiece.data.model.Card
+import com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.DeckLegalityResult
 
 /**
  * Represents quantity information for a card inside a deck.

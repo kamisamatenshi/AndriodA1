@@ -2,7 +2,6 @@ package com.koi.thepiece.ui.screens.deckbuilderscreen
 
 import android.app.Application
 import android.util.Log
-import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.koi.thepiece.AppGraph
@@ -10,6 +9,7 @@ import com.koi.thepiece.data.local.TokenStore
 import com.koi.thepiece.data.model.Card
 import com.koi.thepiece.ui.screens.catalogscreen.CatalogSearchQueryExpander
 import com.koi.thepiece.ui.screens.catalogscreen.components.OpJpMaps
+import com.koi.thepiece.ui.screens.deckbuilderscreen.deckeditor.DeckLegality
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
