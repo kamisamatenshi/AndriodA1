@@ -302,6 +302,7 @@ fun CardPreviewDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // Card Color
                     Row(
                         modifier = Modifier.fillMaxWidth(0.9f),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -310,6 +311,7 @@ fun CardPreviewDialog(
                         Text(card.color)
                     }
 
+                    // Card Type
                     Row(
                         modifier = Modifier.fillMaxWidth(0.9f),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -318,6 +320,7 @@ fun CardPreviewDialog(
                         Text(card.type)
                     }
 
+                    // Card Set
                     if (!card.cardSet.isNullOrBlank()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(0.9f),
@@ -328,6 +331,7 @@ fun CardPreviewDialog(
                         }
                     }
 
+                    // Card Rarity
                     if (!card.rarity.isNullOrBlank()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(0.9f),
@@ -338,6 +342,7 @@ fun CardPreviewDialog(
                         }
                     }
 
+                    // Card Traits
                     if (!card.traits.isNullOrBlank()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(0.9f),
@@ -348,6 +353,7 @@ fun CardPreviewDialog(
                         }
                     }
 
+                    // Card Obtain
                     if (!card.obtainFrom.isNullOrBlank()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(0.9f),
@@ -372,16 +378,16 @@ fun CardPreviewDialog(
                         val displayText = when {
                             price == null -> "Loading..."
 
+                            // display SGD
                             isEnglish -> {
                                 val sgd = price.toDouble() / 120.0
                                 "S$${"%.2f".format(sgd)}"
                             }
-
+                            // display JPY
                             else -> {
                                 "¥${"%,d".format(price)}"
                             }
                         }
-
                         Text(displayText)
                     }
                 }
