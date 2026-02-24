@@ -73,17 +73,19 @@ It provides card browsing, deck building, OCR scanning, authentication, audio cu
 
 ## 🏗 System Architecture
 
-The app follows a modular **MVVM architecture**:
-UI (Jetpack Compose)
-↓
-ViewModel
-↓
-Repository Layer
-↓
-Local (Room) + Remote (Retrofit API)
-
-
----
+```
+Presentation Layer (Jetpack Compose UI)
+                ↓
+          ViewModel Layer
+                ↓
+         Repository Layer
+        ↓               ↓
+Local Data (Room)   Remote Data (Retrofit API)
+                            ↓
+                        PHP Backend
+                            ↓
+                         MySQL DB
+```
 
 ## 🛠 Technologies Used
 
@@ -103,24 +105,24 @@ Local (Room) + Remote (Retrofit API)
 
 ## 📂 Project Structure
 
+```
 com.koi.thepiece
 │
 ├── data
-│ ├── api
-│ ├── db
-│ ├── repo
-│ └── local
+│   ├── api
+│   ├── db
+│   ├── repo
+│   └── local
 │
 ├── ui
-│ ├── screens
-│ ├── components
-│ └── navigation
+│   ├── screens
+│   ├── components
+│   └── navigation
 │
 ├── viewmodel
 │
 └── AppGraph.kt
-
----
+```
 
 ## 🔑 Authentication Flow
 
