@@ -181,16 +181,12 @@ fun CatalogScreen(
         },
         /**
          * Bottom bar: total net worth display and currency toggle.
-         * The "safe check" is redundant because totalNetWorth is non-null and vm is always non-null,
-         * but kept as a defensive UI guard.
          */
-        bottomBar = { if (totalNetWorth != null && vm != null) { // safe check
-            CatalogFooter(
-                totalNetWorth = totalNetWorth.toDouble(),
-                isSgd = isSgd,
-                onToggleCurrency = { vm.toggleCurrency() }
-            )
-        }
+        bottomBar = { CatalogFooter(
+            totalNetWorth = totalNetWorth.toDouble(),
+            isSgd = isSgd,
+            onToggleCurrency = { vm.toggleCurrency() }
+        )
         }
     ) { padding ->
 
