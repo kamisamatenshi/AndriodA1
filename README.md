@@ -149,7 +149,7 @@ com.koi.thepiece
 ### Installation
 
 1. Clone repository
-git clone https://github.com/kamisamatenshi/AndriodA1.git
+`git clone https://github.com/kamisamatenshi/AndriodA1.git`
 
 
 2. Open in Android Studio
