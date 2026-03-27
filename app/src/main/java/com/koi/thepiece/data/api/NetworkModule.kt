@@ -59,10 +59,18 @@ object NetworkModule {
         .addConverterFactory(MoshiConverterFactory.create(moshi))
         .build()
 
+    private val retrofit_PRICE: Retrofit = Retrofit.Builder()
+        .baseUrl(BuildConfig.PRICE_URL)
+        .client(okHttp)
+        .addConverterFactory(MoshiConverterFactory.create(moshi))
+        .build()
+
     /**
      * API service for catalogue-related endpoints.
      */
     val catalogApi: CatalogApi = retrofit.create(CatalogApi::class.java)
+
+    val PriceApi: CatalogApi = retrofit_PRICE.create(CatalogApi::class.java)
 
     /**
      * API service for authentication-related endpoints.

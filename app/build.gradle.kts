@@ -29,7 +29,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "BASE_URL", "\"https://thepiece.tsecm.com/\"")
+        buildConfigField("String", "BASE_URL", "\"https://api.aws.tsecm.com/\"")
+        buildConfigField("String", "PRICE_URL", "\"https://thepiece.tsecm.com/\"")
     }
 
     buildTypes {

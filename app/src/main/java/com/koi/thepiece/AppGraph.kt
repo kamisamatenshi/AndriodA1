@@ -70,6 +70,7 @@ object AppGraph {
             catalogRepo ?: CatalogRepository(
                 appContext = context.applicationContext,
                 api = NetworkModule.catalogApi,
+                price_api = NetworkModule.PriceApi,
                 dao = provideDb(context).cardDao()
             ).also { catalogRepo = it }
         }

@@ -65,6 +65,7 @@ private fun looksLikeSetCode(s: String?): Boolean {
 class CatalogRepository(
     private val appContext: Context,
     private val api: CatalogApi,
+    private val price_api: CatalogApi,
     private val dao: CardDao
 ) {
     /**
@@ -230,7 +231,7 @@ class CatalogRepository(
     suspend fun GetPrice(cardUrl: String?):Result<Int>{
         return withContext(Dispatchers.IO) {
             runCatching {
-                val res = api.getPrice(GetPriceBody(cardUrl))
+                val res = price_api.getPrice(GetPriceBody(cardUrl))
                 if (res.success != true) {
                     throw IllegalStateException(res.message ?: "Server update failed")
                 }
@@ -253,7 +254,7 @@ class CatalogRepository(
     suspend fun getPrice2(cardUrl: String): Result<Int> {
         return withContext(Dispatchers.IO) {
             runCatching {
-                val res = api.getPrice2(cardUrl)
+                val res = price_api.getPrice2(cardUrl)
                 Log.d("PRICE_RAW", "Response = $res")
                 if (res.success != true) throw IllegalStateException(res.error ?: "Price fetch failed")
                 res.price ?: throw IllegalStateException("Missing price")
